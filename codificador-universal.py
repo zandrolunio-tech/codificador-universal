@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 import re
+from urllib.parse import unquote
 
 
 # ============================================================
@@ -31,6 +32,7 @@ def codificar(texto):
 
 def decodificar_hexadecimal(valor):
     try:
+        valor = unquote(valor.strip())
         valor = valor.replace(" ", "")
 
         if not valor or len(valor) % 2 != 0:
@@ -47,14 +49,15 @@ def decodificar_hexadecimal(valor):
 
 def decodificar_binario(valor):
     try:
+        valor = unquote(valor.strip())
         partes = valor.split()
 
         if not partes:
             return None
 
         if any(
-            len(parte) != 8 or
-            not re.fullmatch(r"[01]{8}", parte)
+            len(parte) != 8
+            or not re.fullmatch(r"[01]{8}", parte)
             for parte in partes
         ):
             return None
@@ -69,6 +72,7 @@ def decodificar_binario(valor):
 
 def decodificar_octal(valor):
     try:
+        valor = unquote(valor.strip())
         partes = valor.split()
 
         if not partes:
@@ -87,6 +91,7 @@ def decodificar_octal(valor):
 
 def decodificar_decimal(valor):
     try:
+        valor = unquote(valor.strip())
         partes = valor.split()
 
         if not partes:
@@ -110,6 +115,9 @@ def decodificar_base64(valor):
         if not valor:
             return None
 
+        valor = unquote(valor)
+        valor = "".join(valor.split())
+
         dados = base64.b64decode(
             valor,
             validate=True
@@ -117,12 +125,16 @@ def decodificar_base64(valor):
 
         return dados.decode("utf-8")
 
-    except (ValueError, UnicodeDecodeError, binascii.Error):
+    except (
+        ValueError,
+        UnicodeDecodeError,
+        binascii.Error
+    ):
         return None
 
 
 # ============================================================
-# DETECÇÃO AUTOMÁTICA
+# DETECÇÃO DE FORMATOS
 # ============================================================
 
 def detectar_formatos(valor):
@@ -133,49 +145,44 @@ def detectar_formatos(valor):
     if not valor:
         return resultados
 
-    # Hexadecimal
-    hexadecimal = decodificar_hexadecimal(valor)
+    resultado_base64 = decodificar_base64(valor)
 
-    if hexadecimal is not None:
-        resultados.append({
-            "formato": "hexadecimal",
-            "resultado": hexadecimal
-        })
-
-    # Binário
-    binario = decodificar_binario(valor)
-
-    if binario is not None:
-        resultados.append({
-            "formato": "binário",
-            "resultado": binario
-        })
-
-    # Octal
-    octal = decodificar_octal(valor)
-
-    if octal is not None:
-        resultados.append({
-            "formato": "octal",
-            "resultado": octal
-        })
-
-    # Decimal
-    decimal = decodificar_decimal(valor)
-
-    if decimal is not None:
-        resultados.append({
-            "formato": "decimal",
-            "resultado": decimal
-        })
-
-    # Base64
-    base64_resultado = decodificar_base64(valor)
-
-    if base64_resultado is not None:
+    if resultado_base64 is not None:
         resultados.append({
             "formato": "Base64",
-            "resultado": base64_resultado
+            "resultado": resultado_base64
+        })
+
+    resultado_hex = decodificar_hexadecimal(valor)
+
+    if resultado_hex is not None:
+        resultados.append({
+            "formato": "Hexadecimal",
+            "resultado": resultado_hex
+        })
+
+    resultado_binario = decodificar_binario(valor)
+
+    if resultado_binario is not None:
+        resultados.append({
+            "formato": "Binário",
+            "resultado": resultado_binario
+        })
+
+    resultado_octal = decodificar_octal(valor)
+
+    if resultado_octal is not None:
+        resultados.append({
+            "formato": "Octal",
+            "resultado": resultado_octal
+        })
+
+    resultado_decimal = decodificar_decimal(valor)
+
+    if resultado_decimal is not None:
+        resultados.append({
+            "formato": "Decimal",
+            "resultado": resultado_decimal
         })
 
     return resultados
@@ -186,29 +193,18 @@ def detectar_formatos(valor):
 # ============================================================
 
 def analisar_texto(texto):
-    caracteres = len(texto)
-    bytes_tamanho = len(texto.encode("utf-8"))
-
-    letras = sum(char.isalpha() for char in texto)
-    numeros = sum(char.isdigit() for char in texto)
-    espacos = sum(char.isspace() for char in texto)
-    especiais = sum(
-        not char.isalnum() and not char.isspace()
-        for char in texto
-    )
-
-    maiusculas = sum(char.isupper() for char in texto)
-    minusculas = sum(char.islower() for char in texto)
-
     return {
-        "tamanho_caracteres": caracteres,
-        "tamanho_bytes_utf8": bytes_tamanho,
-        "letras": letras,
-        "maiusculas": maiusculas,
-        "minusculas": minusculas,
-        "numeros": numeros,
-        "espacos": espacos,
-        "caracteres_especiais": especiais,
+        "tamanho_caracteres": len(texto),
+        "tamanho_bytes_utf8": len(texto.encode("utf-8")),
+        "letras": sum(c.isalpha() for c in texto),
+        "maiusculas": sum(c.isupper() for c in texto),
+        "minusculas": sum(c.islower() for c in texto),
+        "numeros": sum(c.isdigit() for c in texto),
+        "espacos": sum(c.isspace() for c in texto),
+        "caracteres_especiais": sum(
+            not c.isalnum() and not c.isspace()
+            for c in texto
+        ),
     }
 
 
@@ -216,13 +212,181 @@ def analisar_texto(texto):
 # COMPARAÇÃO
 # ============================================================
 
-def comparar_strings(a, b):
+def comparar_strings(primeira, segunda):
     return {
-        "iguais": a == b,
-        "tamanho_1": len(a),
-        "tamanho_2": len(b),
-        "diferenca_tamanho": abs(len(a) - len(b)),
+        "iguais": primeira == segunda,
+        "tamanho_1": len(primeira),
+        "tamanho_2": len(segunda),
+        "diferenca_tamanho": abs(
+            len(primeira) - len(segunda)
+        ),
     }
+
+
+# ============================================================
+# IDENTIFICAÇÃO DE BASE64 / URL ENCODING / JWT
+# ============================================================
+
+def identificar_valor(valor):
+    valor = valor.strip()
+
+    resultado = {
+        "tamanho": len(valor),
+        "url_encoded": bool(
+            re.search(r"%[0-9A-Fa-f]{2}", valor)
+        ),
+        "parece_jwt": False,
+        "parece_base64": False,
+    }
+
+    valor_limpo = unquote(valor)
+
+    # JWT normalmente possui três partes separadas por pontos.
+    partes_jwt = valor_limpo.split(".")
+
+    if len(partes_jwt) == 3:
+        padrao_jwt = all(
+            re.fullmatch(
+                r"[A-Za-z0-9_-]+",
+                parte
+            )
+            for parte in partes_jwt
+        )
+
+        resultado["parece_jwt"] = padrao_jwt
+
+    # Verificação conservadora de Base64.
+    try:
+        candidato = "".join(valor_limpo.split())
+
+        if len(candidato) >= 8:
+            base64.b64decode(
+                candidato,
+                validate=True
+            )
+
+            resultado["parece_base64"] = True
+
+    except (ValueError, binascii.Error):
+        pass
+
+    return resultado
+
+
+# ============================================================
+# ANÁLISE DE HTTP
+# ============================================================
+
+def analisar_http(texto):
+    linhas = texto.splitlines()
+
+    resultado = {
+        "tipo": "HTTP",
+        "status": None,
+        "versao_http": None,
+        "headers": [],
+        "cookies": [],
+        "valores_codificados": []
+    }
+
+    for linha in linhas:
+        linha = linha.strip()
+
+        if not linha:
+            continue
+
+        # ----------------------------------------------------
+        # Linha de status
+        # ----------------------------------------------------
+
+        match_status = re.match(
+            r"^(HTTP/\d(?:\.\d)?)\s+(\d{3})\s*(.*)$",
+            linha,
+            re.IGNORECASE
+        )
+
+        if match_status:
+            resultado["versao_http"] = match_status.group(1)
+            resultado["status"] = {
+                "codigo": int(match_status.group(2)),
+                "descricao": match_status.group(3).strip()
+            }
+            continue
+
+        # ----------------------------------------------------
+        # Header HTTP
+        # ----------------------------------------------------
+
+        if ":" in linha:
+            nome, valor = linha.split(":", 1)
+
+            nome = nome.strip()
+            valor = valor.strip()
+
+            resultado["headers"].append({
+                "nome": nome,
+                "valor": valor
+            })
+
+            # ------------------------------------------------
+            # Set-Cookie
+            # ------------------------------------------------
+
+            if nome.lower() == "set-cookie":
+                partes = valor.split(";")
+
+                if partes:
+                    primeira = partes[0].strip()
+
+                    if "=" in primeira:
+                        cookie_nome, cookie_valor = primeira.split(
+                            "=",
+                            1
+                        )
+
+                        cookie_info = {
+                            "nome": cookie_nome.strip(),
+                            "valor_tamanho": len(
+                                cookie_valor.strip()
+                            ),
+                            "atributos": []
+                        }
+
+                        for atributo in partes[1:]:
+                            atributo = atributo.strip()
+
+                            if atributo:
+                                atributo_nome = atributo.split(
+                                    "=",
+                                    1
+                                )[0].strip()
+
+                                cookie_info["atributos"].append(
+                                    atributo_nome
+                                )
+
+                        resultado["cookies"].append(
+                            cookie_info
+                        )
+
+                        info = identificar_valor(
+                            cookie_valor
+                        )
+
+                        if (
+                            info["url_encoded"]
+                            or info["parece_base64"]
+                            or info["parece_jwt"]
+                        ):
+                            resultado[
+                                "valores_codificados"
+                            ].append({
+                                "origem": "cookie",
+                                "nome": cookie_nome.strip(),
+                                "analise": info
+                            })
+
+    return resultado
 
 
 # ============================================================
@@ -264,7 +428,9 @@ def codificar_menu():
 
 
 def decodificar_menu(tipo):
-    valor = input(f"\nDigite o valor {tipo}: ")
+    valor = input(
+        f"\nDigite o valor {tipo}: "
+    )
 
     if tipo == "hexadecimal":
         resultado = decodificar_hexadecimal(valor)
@@ -289,13 +455,17 @@ def decodificar_menu(tipo):
     print("=" * 70)
 
     if resultado is None:
-        print("Valor inválido ou não foi possível descodificar.")
+        print(
+            "Valor inválido ou não foi possível descodificar."
+        )
     else:
         print(resultado)
 
 
 def detectar_menu():
-    valor = input("\nCole a string para analisar: ")
+    valor = input(
+        "\nCole a string para analisar: "
+    )
 
     formatos = detectar_formatos(valor)
 
@@ -304,12 +474,18 @@ def detectar_menu():
     print("=" * 70)
 
     if not formatos:
-        print("\nNenhum formato codificado reconhecido.")
+        print(
+            "\nNenhum formato codificado reconhecido."
+        )
         return
 
     for item in formatos:
-        print(f"\nFormato: {item['formato']}")
-        print(f"Resultado: {item['resultado']}")
+        print(
+            f"\nFormato: {item['formato']}"
+        )
+        print(
+            f"Resultado: {item['resultado']}"
+        )
 
     imprimir_json({
         "entrada": valor,
@@ -318,7 +494,9 @@ def detectar_menu():
 
 
 def analisar_menu():
-    texto = input("\nDigite o texto para analisar: ")
+    texto = input(
+        "\nDigite o texto para analisar: "
+    )
 
     resultado = analisar_texto(texto)
 
@@ -334,21 +512,150 @@ def analisar_menu():
 
 def comparar_menu():
     print("\n" + "=" * 70)
-    print("COMPARAÇÃO")
+    print("COMPARAÇÃO DE STRINGS")
     print("=" * 70)
 
-    primeira = input("\nPrimeira string: ")
-    segunda = input("Segunda string: ")
+    primeira = input(
+        "\nPrimeira string: "
+    )
 
-    resultado = comparar_strings(primeira, segunda)
+    segunda = input(
+        "Segunda string: "
+    )
 
-    print("\nResultado:")
+    resultado = comparar_strings(
+        primeira,
+        segunda
+    )
+
+    print("\n" + "=" * 70)
+    print("RESULTADO")
+    print("=" * 70)
 
     for chave, valor in resultado.items():
         print(f"{chave}: {valor}")
 
     imprimir_json(resultado)
 
+
+# ============================================================
+# MENU HTTP
+# ============================================================
+
+def analisar_http_menu():
+    print("\n" + "=" * 70)
+    print("ANALISADOR HTTP")
+    print("=" * 70)
+
+    print(
+        "\nCole os headers HTTP."
+    )
+
+    print(
+        "Digite FIM em uma linha separada para terminar."
+    )
+
+    linhas = []
+
+    while True:
+        linha = input()
+
+        if linha.strip().upper() == "FIM":
+            break
+
+        linhas.append(linha)
+
+    texto = "\n".join(linhas)
+
+    resultado = analisar_http(texto)
+
+    print("\n" + "=" * 70)
+    print("RESULTADO HTTP")
+    print("=" * 70)
+
+    print(
+        f"\nVersão HTTP: "
+        f"{resultado['versao_http']}"
+    )
+
+    if resultado["status"]:
+        print(
+            f"Código: "
+            f"{resultado['status']['codigo']}"
+        )
+
+        print(
+            f"Descrição: "
+            f"{resultado['status']['descricao']}"
+        )
+
+    print("\nHeaders encontrados:")
+
+    for header in resultado["headers"]:
+        print(
+            f"  {header['nome']}: "
+            f"{header['valor']}"
+        )
+
+    print("\nCookies encontrados:")
+
+    if not resultado["cookies"]:
+        print("  Nenhum cookie encontrado.")
+
+    else:
+        for cookie in resultado["cookies"]:
+            print(
+                f"  {cookie['nome']} "
+                f"(valor com "
+                f"{cookie['valor_tamanho']} caracteres)"
+            )
+
+            if cookie["atributos"]:
+                print(
+                    "    atributos: "
+                    + ", ".join(
+                        cookie["atributos"]
+                    )
+                )
+
+    print(
+        "\nValores com características de "
+        "codificação:"
+    )
+
+    if not resultado["valores_codificados"]:
+        print("  Nenhum identificado.")
+
+    else:
+        for item in resultado[
+            "valores_codificados"
+        ]:
+            print(
+                f"  {item['origem']}: "
+                f"{item['nome']}"
+            )
+
+            print(
+                f"    URL encoded: "
+                f"{item['analise']['url_encoded']}"
+            )
+
+            print(
+                f"    Parece Base64: "
+                f"{item['analise']['parece_base64']}"
+            )
+
+            print(
+                f"    Parece JWT: "
+                f"{item['analise']['parece_jwt']}"
+            )
+
+    imprimir_json(resultado)
+
+
+# ============================================================
+# MENU PRINCIPAL
+# ============================================================
 
 def menu():
     while True:
@@ -365,9 +672,12 @@ def menu():
         print("7 - Detectar formato automaticamente")
         print("8 - Analisar texto")
         print("9 - Comparar duas strings")
+        print("10 - Analisar headers HTTP")
         print("0 - Sair")
 
-        opcao = input("\nEscolha: ").strip()
+        opcao = input(
+            "\nEscolha: "
+        ).strip()
 
         if opcao == "1":
             codificar_menu()
@@ -396,6 +706,9 @@ def menu():
         elif opcao == "9":
             comparar_menu()
 
+        elif opcao == "10":
+            analisar_http_menu()
+
         elif opcao == "0":
             print("\nPrograma encerrado.")
             break
@@ -403,6 +716,10 @@ def menu():
         else:
             print("\nOpção inválida.")
 
+
+# ============================================================
+# INÍCIO
+# ============================================================
 
 if __name__ == "__main__":
     menu()
