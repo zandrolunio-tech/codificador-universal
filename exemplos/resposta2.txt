@@ -1,0 +1,4 @@
+HTTP/2 400 Bad Request
+Content-Type: application/json
+
+{"success":false,"message":"Voucher inválido"}
