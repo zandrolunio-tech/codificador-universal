@@ -1,0 +1,7 @@
+HTTP/2 400 Bad Request
+Content-Type: application/json
+Server: nginx
+Set-Cookie: exemplo_session=REDACTED
+Cache-Control: no-cache
+
+{"success":false,"message":"Voucher inválido"}

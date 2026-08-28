@@ -1,0 +1,8 @@
+HTTP/2 200 OK
+Content-Type: application/json
+Server: nginx
+
+Application: Laravel
+Database: PostgreSQL
+
+{"success":true,"message":"Operação concluída"}

@@ -1,0 +1,25 @@
+HTTP/2 401 Unauthorized
+Content-Type: application/json
+Server: nginx
+Set-Cookie: laravel_session=EXEMPLO_REDACTED; Path=/; HttpOnly; Secure
+Authorization: Bearer EXEMPLO_REDACTED
+X-Powered-By: Express
+X-Framework: Laravel
+X-Debug: Django
+Content-Security-Policy: default-src 'self'
+
+{"success":false,"message":"Unauthorized","token":"EXEMPLO_REDACTED"}
+
+session_id=EXEMPLO_REDACTED
+connect.sid=EXEMPLO_REDACTED
+PHPSESSID=EXEMPLO_REDACTED
+
+eyJhbGciOiJIUzI1NiJ9.EXEMPLO_REDACTED.EXEMPLO_REDACTED
+
+valor%3Dteste%26nome%3Dexemplo%2F123
+
+mysql
+postgresql
+sqlite
+mongodb
+redis
