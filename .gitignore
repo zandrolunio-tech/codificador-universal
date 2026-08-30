@@ -11,3 +11,10 @@ env/
 relatorio_comparacao.json
 relatorio_academico.json
 relatorio_comparacao.json
+
+# Estados e backups locais do analisador
+analisador_banco_novo.py.*
+analisador_banco.py.backup*
+
+# Backup local antes da promoção
+analisador_banco.py.antes_promocao

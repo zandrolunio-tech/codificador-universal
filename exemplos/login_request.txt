@@ -1,0 +1,6 @@
+POST /v1/auth/login?country=AO&group=g2&platform=desktop&locale=pt HTTP/1.1
+Host: exemplo.local
+Content-Type: application/json
+Accept: application/json
+
+{"username":"USUARIO_TESTE_01","password":"SENHA_TESTE_02"}
