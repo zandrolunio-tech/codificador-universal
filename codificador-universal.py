@@ -4,7 +4,12 @@ import base64
 import binascii
 import json
 import re
+from dataclasses import asdict
 from urllib.parse import unquote
+
+from online.inventario_superficie import serializar_inventario
+from online.orquestrador import analisar_online
+
 
 
 # ============================================================
@@ -271,7 +276,246 @@ def identificar_valor(valor):
         pass
 
     return resultado
+# ============================================================
+# MENU DE ANÁLISE ONLINE
+# ============================================================
 
+def analisar_online_menu():
+    print("\n" + "=" * 70)
+    print("ANÁLISE ONLINE")
+    print("=" * 70)
+
+    print(
+        "\nUse este recurso apenas em sistemas que você"
+        "\npossui ou está autorizado a analisar."
+    )
+
+    alvo = input(
+        "\nURL do alvo: "
+    ).strip()
+
+    if not alvo:
+        print("\nURL não informada.")
+        return
+
+    timeout_texto = input(
+        "Timeout em segundos [10]: "
+    ).strip()
+
+    if not timeout_texto:
+        timeout = 10.0
+    else:
+        try:
+            timeout = float(timeout_texto)
+
+            if timeout <= 0:
+                print("\nTimeout deve ser maior que zero.")
+                return
+
+        except ValueError:
+            print("\nTimeout inválido.")
+            return
+
+    portas_texto = input(
+        "Portas TCP específicas para verificar "
+        "(ex.: 80,443) ou ENTER para nenhuma: "
+    ).strip()
+
+    portas = None
+
+    if portas_texto:
+        try:
+            portas = []
+
+            for item in portas_texto.split(","):
+                porta = int(item.strip())
+
+                if not 1 <= porta <= 65535:
+                    raise ValueError
+
+                portas.append(porta)
+
+            portas = sorted(set(portas))
+
+        except ValueError:
+            print(
+                "\nLista de portas inválida. "
+                "Use valores entre 1 e 65535."
+            )
+            return
+
+    print("\nAnalisando...")
+    print("Aguarde.\n")
+
+    try:
+        resultado = analisar_online(
+            alvo,
+            timeout=timeout,
+            analisar_certificado=True,
+            portas=portas,
+        )
+
+    except Exception as erro:
+        print("\nFalha durante a análise:")
+        print(erro)
+        return
+
+    inventario = resultado.metadados.get(
+        "inventario_superficie"
+    )
+
+    dados = {
+        "alvo": resultado.alvo,
+        "sucesso": resultado.sucesso,
+        "respostas": [
+            asdict(resposta)
+            for resposta in resultado.respostas
+        ],
+        "cookies": [
+            asdict(cookie)
+            for cookie in resultado.cookies
+        ],
+        "tls": (
+            asdict(resultado.tls)
+            if resultado.tls is not None
+            else None
+        ),
+        "servicos": [
+            asdict(servico)
+            for servico in resultado.servicos
+        ],
+        "servidores": [
+            asdict(servidor)
+            for servidor in resultado.servidores
+        ],
+        "evidencias": [
+            asdict(evidencia)
+            for evidencia in resultado.evidencias
+        ],
+        "observacoes": list(
+            resultado.observacoes
+        ),
+        "erros": list(
+            resultado.erros
+        ),
+        "metadados": {
+            chave: (
+                [
+                    asdict(correlacao)
+                    for correlacao in valor
+                ]
+                if chave == "correlacoes"
+                else valor
+            )
+            for chave, valor in resultado.metadados.items()
+            if chave != "inventario_superficie"
+        },
+    }
+
+    if inventario is not None:
+        dados["inventario_superficie"] = (
+            serializar_inventario(inventario)
+        )
+
+    print("\n" + "=" * 70)
+    print("RESUMO DA ANÁLISE ONLINE")
+    print("=" * 70)
+
+    print(f"\nAlvo: {resultado.alvo}")
+    print(f"Sucesso: {resultado.sucesso}")
+    print(
+        f"Respostas HTTP: "
+        f"{len(resultado.respostas)}"
+    )
+    print(
+        f"Cookies: "
+        f"{len(resultado.cookies)}"
+    )
+    print(
+        f"Serviços: "
+        f"{len(resultado.servicos)}"
+    )
+    print(
+        f"Servidores: "
+        f"{len(resultado.servidores)}"
+    )
+    print(
+        f"Evidências: "
+        f"{len(resultado.evidencias)}"
+    )
+
+    if resultado.tls is not None:
+        print(
+            "\nTLS:"
+        )
+        print(
+            f"  Protocolo: "
+            f"{resultado.tls.protocolo}"
+        )
+        print(
+            f"  Cipher: "
+            f"{resultado.tls.cipher}"
+        )
+        print(
+            f"  Certificado válido: "
+            f"{resultado.tls.certificado_valido}"
+        )
+        print(
+            f"  Hostname compatível: "
+            f"{resultado.tls.hostname_compativel}"
+        )
+
+    if resultado.respostas:
+        print("\nRespostas HTTP:")
+
+        for resposta in resultado.respostas:
+            print(
+                f"  {resposta.status_code} "
+                f"{resposta.reason} "
+                f"{resposta.url}"
+            )
+
+    if resultado.servicos:
+        print("\nServiços observados:")
+
+        for servico in resultado.servicos:
+            print(
+                f"  {servico.porta}/"
+                f"{servico.transporte}: "
+                f"{servico.servico}"
+            )
+
+    if resultado.servidores:
+        print("\nServidores observados:")
+
+        for servidor in resultado.servidores:
+            produto = servidor.produto or "desconhecido"
+            versao = servidor.versao or "sem versão"
+
+            print(
+                f"  {produto} "
+                f"{versao}"
+            )
+
+    if resultado.evidencias:
+        print("\nEvidências:")
+
+        for evidencia in resultado.evidencias:
+            print(
+                f"  [{evidencia.confianca}] "
+                f"{evidencia.identificador}: "
+                f"{evidencia.titulo}"
+            )
+
+    if resultado.erros:
+        print("\nErros:")
+
+        for erro in resultado.erros:
+            print(
+                f"  - {erro}"
+            )
+
+    imprimir_json(dados)
 
 # ============================================================
 # ANÁLISE DE HTTP
@@ -673,6 +917,7 @@ def menu():
         print("8 - Analisar texto")
         print("9 - Comparar duas strings")
         print("10 - Analisar headers HTTP")
+        print("11 - Análise online")
         print("0 - Sair")
 
         opcao = input(
@@ -708,6 +953,8 @@ def menu():
 
         elif opcao == "10":
             analisar_http_menu()
+        elif opcao == "11":
+            analisar_online_menu()
 
         elif opcao == "0":
             print("\nPrograma encerrado.")

@@ -15,7 +15,7 @@ from .inventario_superficie import (
 )
 from .analisador_portas import analisar_portas
 
-from .modelos import OnlineResultado
+from .modelos import OnlineResultado, TLSResultado
 
 
 def _host_do_alvo(alvo: str) -> str:
@@ -81,7 +81,6 @@ def analisar_online(
             resultado.observacoes.append(
                 "Conteúdo JSON identificado."
             )
-
     # ---------------------------------------------------------
     # 3. ANÁLISE TLS
     # ---------------------------------------------------------
@@ -91,7 +90,57 @@ def analisar_online(
     )
 
     if tls_resultado.get("sucesso"):
-        resultado.tls = tls_resultado
+        certificado = tls_resultado.get(
+            "certificado",
+            {},
+        )
+
+        sujeito = certificado.get(
+            "sujeito",
+            [],
+        )
+
+        emissor = certificado.get(
+            "emissor",
+            [],
+        )
+
+        resultado.tls = TLSResultado(
+            disponivel=True,
+            protocolo=tls_resultado.get(
+                "versao_tls",
+                "",
+            ) or "",
+            cipher=(
+                tls_resultado.get(
+                    "cipher",
+                    {},
+                ) or {}
+            ).get(
+                "nome",
+                "",
+            ),
+            certificado_valido=True,
+            emissor=(
+                emissor[0].get("valor", "")
+                if emissor
+                else ""
+            ),
+            sujeito=(
+                sujeito[0].get("valor", "")
+                if sujeito
+                else ""
+            ),
+            validade_inicio=certificado.get(
+                "not_before",
+                "",
+            ) or "",
+            validade_fim=certificado.get(
+                "not_after",
+                "",
+            ) or "",
+            hostname_compativel=None,
+        )
 
         if analisar_certificado:
             resultado.evidencias.extend(
@@ -109,7 +158,6 @@ def analisar_online(
                 "Falha na análise TLS.",
             )
         )
-
     # ---------------------------------------------------------
     # 4. IDENTIFICAÇÃO DE SERVIDORES
     # ---------------------------------------------------------
@@ -144,7 +192,7 @@ def analisar_online(
     if resultado.tls is not None:
         servico_tls = observar_tls(
             alvo,
-            resultado.tls,
+            tls_resultado,
         )
 
         if servico_tls is not None:
