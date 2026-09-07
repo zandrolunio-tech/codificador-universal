@@ -99,7 +99,7 @@ class TestOrquestrador(unittest.TestCase):
         )
 
         self.assertEqual(
-            resultado.tls["versao_tls"],
+            resultado.tls.protocolo,
             "TLSv1.3",
         )
 

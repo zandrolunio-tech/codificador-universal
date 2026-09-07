@@ -1,10 +1,14 @@
 from __future__ import annotations
-
+from .extrator_javascript import extrair_javascript
+from .analisador_javascript import analisar_javascript
 from .analisador_resposta import analisar_resposta
 from .analisador_servidor import analisar_servidor
 from .analisador_tls import analisar_tls
 from .cliente_http import coletar
 from .correlacao import correlacionar, ordenar_correlacoes
+from .decodificador_javascript import extrair_strings_javascript
+from .normalizador_javascript import normalizar_string_javascript
+
 from .evidencias import (
     evidenciar_status_http,
     evidenciar_tls,
@@ -81,6 +85,70 @@ def analisar_online(
             resultado.observacoes.append(
                 "Conteúdo JSON identificado."
             )
+    # 2.5. ANÁLISE ESTÁTICA DE JAVASCRIPT
+    javascript_resultados = []
+
+    for resposta in resultado.respostas:
+        if not resposta.corpo:
+            continue
+
+        scripts = extrair_javascript(
+            resposta.corpo,
+            base_url=resposta.url,
+        )
+
+        if not scripts:
+            continue
+
+        analises = []
+
+        for script in scripts:
+            if not script.conteudo:
+                continue
+
+            analise = analisar_javascript(
+                script.conteudo
+            )
+
+            strings = extrair_strings_javascript(
+                script.conteudo
+            )
+
+            strings_normalizadas = [
+                normalizar_string_javascript(
+                    valor
+                )
+                for valor in strings
+            ]
+
+            analises.append({
+                "origem": script.origem,
+                "tipo": script.tipo,
+                "url": script.url,
+                "atributos": dict(script.atributos),
+                "analise": analise,
+                "strings": strings_normalizadas,
+            })
+
+        javascript_resultados.append({
+        "url": resposta.url,
+        "scripts": [
+                {
+            "origem": script.origem,
+            "tipo": script.tipo,
+            "url": script.url,
+            "conteudo": script.conteudo,
+            "atributos": dict(script.atributos),
+                }
+            for script in scripts
+            ],
+            "analises": analises,
+        })
+
+    resultado.metadados["javascript"] = (
+        javascript_resultados
+    )
+
     # ---------------------------------------------------------
     # 3. ANÁLISE TLS
     # ---------------------------------------------------------

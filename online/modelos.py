@@ -26,7 +26,32 @@ class HTTPResposta:
 class CookieObservado:
     nome: str
     atributos: dict[str, Any] = field(default_factory=dict)
+@dataclass
+class JavaScriptExtraido:
+    origem: str
+    tipo: str
+    url: str = ""
+    conteudo: str = ""
+    atributos: dict[str, str] = field(default_factory=dict)
 
+
+@dataclass
+class JavaScriptAnalise:
+    detectado: bool = False
+    tamanho: int = 0
+    funcoes: list[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    exports: list[str] = field(default_factory=list)
+    urls: list[str] = field(default_factory=list)
+    endpoints: list[str] = field(default_factory=list)
+    websockets: list[str] = field(default_factory=list)
+    frameworks: list[str] = field(default_factory=list)
+    apis: dict[str, list[str]] = field(
+        default_factory=dict
+    )
+    caracteristicas: dict[str, bool] = field(
+        default_factory=dict
+    )
 
 @dataclass
 class TLSResultado:
