@@ -405,7 +405,14 @@ def analisar_online_menu():
                     for correlacao in valor
                 ]
                 if chave == "correlacoes"
-                else valor
+                else (
+                    [
+                        asdict(porta)
+                        for porta in valor
+                    ]
+                    if chave == "portas_verificadas"
+                    else valor
+                )
             )
             for chave, valor in resultado.metadados.items()
             if chave != "inventario_superficie"
