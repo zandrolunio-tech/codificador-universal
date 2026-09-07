@@ -242,3 +242,148 @@ def serializar_correlacoes(
         }
         for item in correlacoes
     ]
+
+
+def correlacionar_javascript(
+    analises: list[dict[str, Any]],
+) -> list[Correlacao]:
+    """
+    Correlaciona padrões estáticos de JavaScript.
+
+    Procura uma relação entre uma fonte de dados e um DOM sink
+    que já tenham sido identificados pelo analisador.
+
+    Esta função é puramente estática:
+    - não executa JavaScript;
+    - não realiza requisições;
+    - não explora o alvo;
+    - não confirma uma vulnerabilidade.
+
+    Uma relação fonte -> sink é tratada como evidência para
+    revisão manual.
+    """
+
+    resultado: list[Correlacao] = []
+
+    for item in analises:
+        if not isinstance(item, dict):
+            continue
+
+        analise = item.get("analise", {})
+
+        if not isinstance(analise, dict):
+            continue
+
+        dom_sinks = analise.get(
+            "dom_sinks",
+            [],
+        )
+
+        fontes_dados = analise.get(
+            "fontes_dados",
+            [],
+        )
+
+        if not isinstance(dom_sinks, list):
+            continue
+
+        if not isinstance(fontes_dados, list):
+            continue
+
+        if not dom_sinks or not fontes_dados:
+            continue
+
+        origem = item.get(
+            "origem",
+            "",
+        )
+
+        url = item.get(
+            "url",
+            "",
+        )
+
+        for sink in dom_sinks:
+            if not isinstance(sink, dict):
+                continue
+
+            sink_tipo = sink.get(
+                "tipo",
+                "",
+            )
+
+            sink_linha = sink.get(
+                "linha",
+            )
+
+            sink_conteudo = sink.get(
+                "conteudo",
+                "",
+            )
+
+            for fonte in fontes_dados:
+                if not isinstance(fonte, dict):
+                    continue
+
+                fonte_tipo = fonte.get(
+                    "tipo",
+                    "",
+                )
+
+                fonte_linha = fonte.get(
+                    "linha",
+                )
+
+                fonte_conteudo = fonte.get(
+                    "conteudo",
+                    "",
+                )
+
+                mesma_linha = (
+                    sink_linha is not None
+                    and fonte_linha is not None
+                    and sink_linha == fonte_linha
+                )
+
+                if not mesma_linha:
+                    continue
+
+                resultado.append(
+                    Correlacao(
+                        identificador=(
+                            "CORR-JS-DOM-SOURCE-SINK"
+                        ),
+                        titulo=(
+                            "Cadeia estática "
+                            "fonte → DOM sink observada"
+                        ),
+                        categoria="javascript",
+                        severidade="baixo",
+                        confianca="ALTA",
+                        observacao=(
+                            "Foi observada, estaticamente, "
+                            "uma fonte de dados associada "
+                            "a um DOM sink na mesma linha. "
+                            "Isso não confirma uma "
+                            "vulnerabilidade e requer "
+                            "revisão do fluxo de dados."
+                        ),
+                        recomendacao=(
+                            "Revisar a origem, o tratamento "
+                            "e a sanitização dos dados antes "
+                            "de sua utilização no DOM."
+                        ),
+                        metadados={
+                            "origem": origem,
+                            "url": url,
+                            "sink": sink_tipo,
+                            "source": fonte_tipo,
+                            "linha_sink": sink_linha,
+                            "linha_source": fonte_linha,
+                            "conteudo_sink": sink_conteudo,
+                            "conteudo_source": fonte_conteudo,
+                        },
+                    )
+                )
+
+    return resultado

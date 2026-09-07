@@ -223,7 +223,307 @@ class TestAnalisadorJavaScript(unittest.TestCase):
         self.assertTrue(
             resultado["caracteristicas"]["usa_modules"]
         )
+    def test_detecta_padroes_sensiveis(self):
+        codigo = """
+        const token = document.cookie;
 
+        localStorage.setItem("token", token);
+
+        const sessao =
+            sessionStorage.getItem("sessao");
+
+        const executar =
+            new Function("return 1 + 1");
+
+        const xhr =
+            new XMLHttpRequest();
+
+        const ws =
+            new WebSocket(
+                "wss://ws.exemplo.test/socket"
+            );
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        padroes = resultado["padroes_sensiveis"]
+
+        self.assertTrue(
+            padroes["document_cookie"]
+        )
+
+        self.assertTrue(
+            padroes["local_storage"]
+        )
+
+        self.assertTrue(
+            padroes["session_storage"]
+        )
+
+        self.assertTrue(
+            padroes["new_function"]
+        )
+
+        self.assertTrue(
+            padroes["xmlhttprequest"]
+        )
+
+        self.assertTrue(
+            padroes["websocket"]
+        )
+
+
+    def test_inspecao_profunda(self):
+        codigo = """
+        const token = document.cookie;
+
+        localStorage.setItem(
+            "token",
+            token
+        );
+
+        const xhr =
+            new XMLHttpRequest();
+
+        xhr.open(
+            "POST",
+            "https://api.exemplo.test/api/login"
+        );
+
+        const ws =
+            new WebSocket(
+                "wss://ws.exemplo.test/socket"
+            );
+
+        fetch(
+            "https://api.exemplo.test/api/dados",
+            {
+                method: "GET",
+                headers: {
+                    Authorization:
+                        "Bearer exemplo"
+                }
+            }
+        );
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        profunda = resultado[
+            "inspecao_profunda"
+        ]
+
+        self.assertIn(
+            "https://api.exemplo.test/api/login",
+            profunda["urls_http"],
+        )
+
+        self.assertIn(
+            "https://api.exemplo.test/api/dados",
+            profunda["urls_http"],
+        )
+
+        self.assertIn(
+            "wss://ws.exemplo.test/socket",
+            profunda["urls_websocket"],
+        )
+
+        self.assertEqual(
+            profunda["metodos_http"]["POST"],
+            1,
+        )
+
+        self.assertEqual(
+            profunda["metodos_http"]["GET"],
+            1,
+        )
+
+        indicadores = profunda[
+            "indicadores_sensiveis"
+        ]
+
+        self.assertIn(
+            "localStorage",
+            indicadores,
+        )
+
+        self.assertIn(
+            "document.cookie",
+            indicadores,
+        )
+
+        self.assertIn(
+            "Authorization",
+            indicadores,
+        )
+
+        self.assertIn(
+            "Bearer",
+            indicadores,
+        )
+
+        self.assertIn(
+            "XMLHttpRequest",
+            indicadores,
+        )
+
+        self.assertIn(
+            "WebSocket",
+            indicadores,
+        )
+
+
+    def test_inspecao_profunda_resumo(self):
+        codigo = """
+        fetch("https://api.exemplo.test/dados");
+
+        const ws =
+            new WebSocket(
+                "wss://ws.exemplo.test/socket"
+            );
+
+        const xhr =
+            new XMLHttpRequest();
+
+        xhr.open(
+            "POST",
+            "https://api.exemplo.test/login"
+        );
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        resumo = resultado[
+            "inspecao_profunda"
+        ]["resumo"]
+
+        self.assertEqual(
+            resumo["urls_http"],
+            2,
+        )
+
+        self.assertEqual(
+            resumo["urls_websocket"],
+            1,
+        )
+
+        self.assertEqual(
+            resumo["metodos_http"],
+            1,
+        )
+
+        self.assertGreaterEqual(
+            resumo["indicadores_sensiveis"],
+            2,
+        )
+    def test_detecta_dom_sinks(self):
+        codigo = """
+        const elemento = document.createElement("div");
+
+        elemento.innerHTML = resposta;
+
+        elemento.outerHTML = conteudo;
+
+        elemento.insertAdjacentHTML(
+            "beforeend",
+            html
+        );
+
+        document.write(html);
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        sinks = resultado["dom_sinks"]
+
+        tipos = {
+            item["tipo"]
+            for item in sinks
+        }
+
+        self.assertIn(
+            "innerHTML",
+            tipos,
+        )
+
+        self.assertIn(
+            "outerHTML",
+            tipos,
+        )
+
+        self.assertIn(
+            "insertAdjacentHTML",
+            tipos,
+        )
+
+        self.assertIn(
+            "document.write",
+            tipos,
+        )
+
+    def test_detecta_fontes_de_dados(self):
+        codigo = """
+        const xhr = new XMLHttpRequest();
+
+        xhr.onload = function () {
+            const dados = xhr.response;
+            const texto = xhr.responseText;
+        };
+
+        fetch("/api/dados");
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        fontes = resultado["fontes_dados"]
+
+        tipos = {
+            item["tipo"]
+            for item in fontes
+        }
+
+        self.assertIn(
+            "XMLHttpRequest.response",
+            tipos,
+        )
+
+        self.assertIn(
+            "XMLHttpRequest.responseText",
+            tipos,
+        )
+
+        self.assertIn(
+            "fetch",
+            tipos,
+        )
+
+    def test_detecta_cadeia_fonte_dom_sink(self):
+        codigo = """
+        const xhr = new XMLHttpRequest();
+
+        xhr.onload = function () {
+            elemento.innerHTML = xhr.response;
+        };
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        fontes = resultado["fontes_dados"]
+        sinks = resultado["dom_sinks"]
+
+        self.assertTrue(
+            any(
+                item["tipo"] == "XMLHttpRequest.response"
+                for item in fontes
+            )
+        )
+
+        self.assertTrue(
+            any(
+                item["tipo"] == "innerHTML"
+                for item in sinks
+            )
+        )
 
 if __name__ == "__main__":
     unittest.main()

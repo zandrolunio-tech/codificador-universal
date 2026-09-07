@@ -207,6 +207,9 @@ class TestOrquestrador(unittest.TestCase):
                     "wss://exemplo.test/socket"
                 );
 
+                const xhr = new XMLHttpRequest();
+                element.innerHTML = xhr.response;
+
                 const mensagem = "aHR0cHM6Ly9leGVtcGxvLnRlc3Q=";
             </script>
         </head>
@@ -310,6 +313,16 @@ class TestOrquestrador(unittest.TestCase):
                 item["original"]
                 == "aHR0cHM6Ly9leGVtcGxvLnRlc3Q="
                 for item in strings
+            )
+        )
+
+        correlacoes = resultado.metadados["correlacoes"]
+
+        self.assertTrue(
+            any(
+                correlacao.identificador
+                == "CORR-JS-DOM-SOURCE-SINK"
+                for correlacao in correlacoes
             )
         )
 

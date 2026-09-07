@@ -266,11 +266,357 @@ def _detectar_caracteristicas(codigo: str) -> dict[str, bool]:
     }
 
 
+
+def _extrair_contextos(
+    codigo: str,
+    padrao: str,
+    linhas_contexto: int,
+) -> list[dict]:
+    """
+    Localiza ocorrências de um padrão e retorna a linha encontrada
+    juntamente com algumas linhas ao redor.
+
+    A análise é puramente estática:
+    o JavaScript não é executado.
+    """
+
+    regex = re.compile(
+        padrao,
+        flags=re.IGNORECASE,
+    )
+
+    linhas = codigo.splitlines()
+    ocorrencias = []
+
+    for indice, linha in enumerate(linhas):
+        if not regex.search(linha):
+            continue
+
+        inicio = max(
+            0,
+            indice - linhas_contexto,
+        )
+
+        fim = min(
+            len(linhas),
+            indice + linhas_contexto + 1,
+        )
+
+        contexto = []
+
+        for numero in range(inicio, fim):
+            contexto.append(
+                {
+                    "linha": numero + 1,
+                    "conteudo": linhas[numero],
+                }
+            )
+
+        ocorrencias.append(
+            {
+                "linha": indice + 1,
+                "contexto": contexto,
+            }
+        )
+
+    return ocorrencias
+
+
+def _analisar_padroes_sensiveis(codigo: str) -> dict[str, list[dict]]:
+    """
+    Procura padrões relevantes para análise estática de JavaScript.
+
+    A presença de um padrão não significa, por si só, que exista
+    uma vulnerabilidade. O resultado serve como evidência para
+    análise e correlação posteriores.
+    """
+
+    padroes = {
+        "document_cookie": {
+            "padrao": r"\bdocument\.cookie\b",
+            "linhas_contexto": 3,
+        },
+        "local_storage": {
+            "padrao": r"\blocalStorage\b",
+            "linhas_contexto": 3,
+        },
+        "session_storage": {
+            "padrao": r"\bsessionStorage\b",
+            "linhas_contexto": 3,
+        },
+        "new_function": {
+            "padrao": r"\bnew\s+Function\b",
+            "linhas_contexto": 3,
+        },
+        "xmlhttprequest": {
+            "padrao": r"\bXMLHttpRequest\b",
+            "linhas_contexto": 3,
+        },
+        "wss_live_publisher": {
+            "padrao": (
+                r"wss://live-publisher-api\.premierbet\.co\.ao/v1"
+            ),
+            "linhas_contexto": 5,
+        },
+        "websocket": {
+            "padrao": r"\bWebSocket\b",
+            "linhas_contexto": 5,
+        },
+    }
+
+    resultado = {}
+
+    for nome, configuracao in padroes.items():
+        ocorrencias = _extrair_contextos(
+            codigo,
+            configuracao["padrao"],
+            configuracao["linhas_contexto"],
+        )
+
+        resultado[nome] = ocorrencias
+
+    return resultado
+
+
+def _analisar_dom_sinks(codigo: str) -> list[dict[str, Any]]:
+    """
+    Detecta sinks de DOM por análise estática.
+
+    A detecção representa apenas um ponto potencial de
+    consumo de dados no DOM. Não confirma vulnerabilidade.
+    """
+    padroes = [
+        (r"\.innerHTML\s*=", "innerHTML"),
+        (r"\.outerHTML\s*=", "outerHTML"),
+        (r"\.insertAdjacentHTML\s*\(", "insertAdjacentHTML"),
+        (r"\bdocument\.write(?:ln)?\s*\(", "document.write"),
+    ]
+
+    resultado = []
+
+    for padrao, tipo in padroes:
+        contextos = _extrair_contextos(
+            codigo,
+            padrao,
+            linhas_contexto=0,
+        )
+
+        for item in contextos:
+            resultado.append(
+                {
+                    "tipo": tipo,
+                    "linha": item["linha"],
+                    "conteudo": item["contexto"][0]["conteudo"],
+                }
+            )
+
+    resultado.sort(key=lambda item: item["linha"])
+
+    return resultado
+
+
+def _analisar_fontes_dados(codigo: str) -> list[dict[str, Any]]:
+    """
+    Detecta fontes de dados relevantes por análise estática.
+
+    A análise identifica apenas padrões sintáticos.
+    Não executa o código nem confirma que os dados sejam
+    controláveis por um usuário externo.
+    """
+    resultado = []
+
+    # Identifica variáveis que recebem XMLHttpRequest.
+    xhr_variaveis = set(
+        re.findall(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*="
+            r"\s*new\s+XMLHttpRequest\s*\(",
+            codigo,
+        )
+    )
+
+    for variavel in sorted(xhr_variaveis):
+        padroes = [
+            (
+                rf"\b{re.escape(variavel)}\.response\b",
+                "XMLHttpRequest.response",
+            ),
+            (
+                rf"\b{re.escape(variavel)}\.responseText\b",
+                "XMLHttpRequest.responseText",
+            ),
+        ]
+
+        for padrao, tipo in padroes:
+            contextos = _extrair_contextos(
+                codigo,
+                padrao,
+                linhas_contexto=0,
+            )
+
+            for item in contextos:
+                resultado.append(
+                    {
+                        "tipo": tipo,
+                        "linha": item["linha"],
+                        "conteudo": item["contexto"][0]["conteudo"],
+                    }
+                )
+
+    # fetch() é registrado como fonte de dados candidata.
+    contextos_fetch = _extrair_contextos(
+        codigo,
+        r"\bfetch\s*\(",
+        linhas_contexto=0,
+    )
+
+    for item in contextos_fetch:
+        resultado.append(
+            {
+                "tipo": "fetch",
+                "linha": item["linha"],
+                "conteudo": item["contexto"][0]["conteudo"],
+            }
+        )
+
+    resultado.sort(key=lambda item: item["linha"])
+
+    return resultado
+
+
+
+def _analisar_inspecao_profunda(codigo: str) -> dict:
+    """
+    Executa uma inspeção estática mais ampla do JavaScript.
+
+    Equivale, dentro do analisador, às inspeções que normalmente
+    seriam feitas manualmente com curl, head e grep.
+
+    O código não é executado e nenhuma requisição é realizada.
+    """
+
+    if not codigo:
+        return {
+            "tamanho_bytes": 0,
+            "inicio_codigo": "",
+            "urls_http": [],
+            "urls_websocket": [],
+            "metodos_http": {},
+            "indicadores_sensiveis": {},
+            "resumo": {
+                "urls_http": 0,
+                "urls_websocket": 0,
+                "metodos_http": 0,
+                "indicadores_sensiveis": 0,
+            },
+        }
+
+    # Equivalente estático a:
+    # wc -c
+    tamanho_bytes = len(
+        codigo.encode("utf-8")
+    )
+
+    # Equivalente seguro a:
+    # head -c 500
+    inicio_codigo = codigo[:500]
+
+    # URLs HTTP/HTTPS.
+    urls_http = _encontrar_unicos(
+        r"""https?://[^"'`\s)]+""",
+        codigo,
+    )
+
+    # URLs WebSocket.
+    urls_websocket = _encontrar_unicos(
+        r"""wss?://[^"'`\s)]+""",
+        codigo,
+    )
+
+    # Métodos HTTP.
+    metodos = [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    ]
+
+    metodos_http = {}
+
+    for metodo in metodos:
+        ocorrencias = re.findall(
+            rf"""["']{metodo}["']""",
+            codigo,
+            flags=re.IGNORECASE,
+        )
+
+        if ocorrencias:
+            metodos_http[metodo] = len(
+                ocorrencias
+            )
+
+    # Também reconhece:
+    # xhr.open("GET", ...)
+    # mesmo quando a contagem anterior já encontrou o método.
+    #
+    # Mantemos uma contagem única das ocorrências literais
+    # para não inventar chamadas que não estejam no código.
+
+    indicadores = {
+        "localStorage": r"\blocalStorage\b",
+        "sessionStorage": r"\bsessionStorage\b",
+        "document.cookie": r"\bdocument\.cookie\b",
+        "Authorization": r"\bAuthorization\b",
+        "Bearer": r"\bBearer\b",
+        "WebSocket": r"\bWebSocket\b",
+        "XMLHttpRequest": r"\bXMLHttpRequest\b",
+    }
+
+    indicadores_sensiveis = {}
+
+    for nome, padrao in indicadores.items():
+        ocorrencias = _extrair_contextos(
+            codigo,
+            padrao,
+            2,
+        )
+
+        if ocorrencias:
+            indicadores_sensiveis[nome] = {
+                "quantidade": len(ocorrencias),
+                "ocorrencias": ocorrencias,
+            }
+
+    quantidade_indicadores = sum(
+        item["quantidade"]
+        for item in indicadores_sensiveis.values()
+    )
+
+    return {
+        "tamanho_bytes": tamanho_bytes,
+        "inicio_codigo": inicio_codigo,
+        "urls_http": urls_http,
+        "urls_websocket": urls_websocket,
+        "metodos_http": metodos_http,
+        "indicadores_sensiveis": indicadores_sensiveis,
+        "resumo": {
+            "urls_http": len(urls_http),
+            "urls_websocket": len(urls_websocket),
+            "metodos_http": sum(
+                metodos_http.values()
+            ),
+            "indicadores_sensiveis": quantidade_indicadores,
+        },
+    }
+
+
 def analisar_javascript(codigo: str) -> dict:
     """
     Analisa estruturalmente código JavaScript.
 
     A função não executa o código e não realiza requisições.
+
     """
 
     if not isinstance(codigo, str):
@@ -296,6 +642,29 @@ def analisar_javascript(codigo: str) -> dict:
                 "axios": [],
             },
             "frameworks": [],
+            "padroes_sensiveis": {
+                "document_cookie": [],
+                "local_storage": [],
+                "session_storage": [],
+                "new_function": [],
+                "xmlhttprequest": [],
+                "wss_live_publisher": [],
+                "websocket": [],
+            },
+            "inspecao_profunda": {
+                "tamanho_bytes": 0,
+                "inicio_codigo": "",
+                "urls_http": [],
+                "urls_websocket": [],
+                "metodos_http": {},
+                "indicadores_sensiveis": {},
+                "resumo": {
+                    "urls_http": 0,
+                    "urls_websocket": 0,
+                    "metodos_http": 0,
+                    "indicadores_sensiveis": 0,
+                },
+            },
             "caracteristicas": {
                 "usa_fetch": False,
                 "usa_xhr": False,
@@ -305,7 +674,12 @@ def analisar_javascript(codigo: str) -> dict:
             },
         }
 
+    dom_sinks = _analisar_dom_sinks(codigo)
+    fontes_dados = _analisar_fontes_dados(codigo)
+
     return {
+        "dom_sinks": dom_sinks,
+        "fontes_dados": fontes_dados,
         "detectado": True,
         "tamanho": len(codigo),
         "funcoes": _analisar_funcoes(codigo),
@@ -316,5 +690,7 @@ def analisar_javascript(codigo: str) -> dict:
         "websockets": _analisar_websockets(codigo),
         "apis": _analisar_apis(codigo),
         "frameworks": _detectar_frameworks(codigo),
+        "padroes_sensiveis": _analisar_padroes_sensiveis(codigo),
+        "inspecao_profunda": _analisar_inspecao_profunda(codigo),
         "caracteristicas": _detectar_caracteristicas(codigo),
     }

@@ -5,22 +5,21 @@ from .analisador_resposta import analisar_resposta
 from .analisador_servidor import analisar_servidor
 from .analisador_tls import analisar_tls
 from .cliente_http import coletar
-from .correlacao import correlacionar, ordenar_correlacoes
+from .correlacao import (
+    correlacionar,
+    correlacionar_javascript,
+    ordenar_correlacoes,
+)
 from .decodificador_javascript import extrair_strings_javascript
 from .normalizador_javascript import normalizar_string_javascript
-
+from .analisador_portas import analisar_portas
+from .inventario_superficie import construir_inventario
+from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
     evidenciar_status_http,
     evidenciar_tls,
     ordenar_evidencias,
 )
-from .inventario_superficie import (
-    construir_inventario,
-)
-from .analisador_portas import analisar_portas
-
-from .modelos import OnlineResultado, TLSResultado
-
 
 def _host_do_alvo(alvo: str) -> str:
     """Obtém somente o hostname do alvo."""
@@ -292,8 +291,31 @@ def analisar_online(
         resultado.evidencias
     )
 
+    correlacoes = correlacionar(
+        resultado.evidencias
+    )
+
+    # A análise JavaScript é armazenada por resposta HTTP.
+    # A correlação trabalha com as análises individuais
+    # de cada script.
+    analises_javascript = []
+
+    for resposta_javascript in javascript_resultados:
+        analises_javascript.extend(
+            resposta_javascript.get(
+                "analises",
+                [],
+            )
+        )
+
+    correlacoes.extend(
+        correlacionar_javascript(
+            analises_javascript
+        )
+    )
+
     correlacoes = ordenar_correlacoes(
-        correlacionar(resultado.evidencias)
+        correlacoes
     )
 
     # As correlações são mantidas no metadado para não quebrar
