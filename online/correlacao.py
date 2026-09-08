@@ -255,7 +255,8 @@ def _extrair_variavel_da_fonte(
 
         const resposta = xhr.response;
         let dados = xhr.response;
-        var resultado = xhr.response;
+        var resultado = xhr.responseText;
+        var corpo = xhr.response;
 
     A análise é puramente estática.
     """
@@ -263,20 +264,31 @@ def _extrair_variavel_da_fonte(
     if not conteudo or not fonte_tipo:
         return None
 
-    if fonte_tipo == "XMLHttpRequest.response":
-        padrao = (
-            r"\b(?:const|let|var)\s+"
-            r"([A-Za-z_$][\w$]*)\s*=\s*"
-            r"[A-Za-z_$][\w$]*\.response\b"
-        )
+    propriedades = {
+        "XMLHttpRequest.response": "response",
+        "XMLHttpRequest.responseText": "responseText",
+    }
 
-        correspondencia = re.search(
-            padrao,
-            conteudo,
-        )
+    propriedade = propriedades.get(fonte_tipo)
 
-        if correspondencia:
-            return correspondencia.group(1)
+    if not propriedade:
+        return None
+
+    padrao = (
+        r"\b(?:const|let|var)\s+"
+        r"([A-Za-z_$][\w$]*)\s*=\s*"
+        r"[A-Za-z_$][\w$]*\."
+        + re.escape(propriedade)
+        + r"\b"
+    )
+
+    correspondencia = re.search(
+        padrao,
+        conteudo,
+    )
+
+    if correspondencia:
+        return correspondencia.group(1)
 
     return None
 

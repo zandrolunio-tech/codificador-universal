@@ -229,3 +229,51 @@ class TestCorrelacaoJavaScript(unittest.TestCase):
             correlacao.metadados["variavel"],
             "resposta",
         )
+
+    def test_detecta_fluxo_response_text_para_dom_sink(self):
+        analises = [
+            {
+                "origem": "inline",
+                "tipo": "script",
+                "url": "",
+                "analise": {
+                    "dom_sinks": [
+                        {
+                            "tipo": "innerHTML",
+                            "linha": 6,
+                            "conteudo": "element.innerHTML = resultado;",
+                        }
+                    ],
+                    "fontes_dados": [
+                        {
+                            "tipo": "XMLHttpRequest.responseText",
+                            "linha": 3,
+                            "conteudo": "var resultado = xhr.responseText;",
+                        }
+                    ],
+                },
+            }
+        ]
+
+        resultado = correlacionar_javascript(analises)
+
+        self.assertEqual(len(resultado), 1)
+
+        correlacao = resultado[0]
+
+        self.assertEqual(
+            correlacao.identificador,
+            "CORR-JS-FLUXO-DOM-SOURCE-SINK",
+        )
+        self.assertEqual(
+            correlacao.metadados["source"],
+            "XMLHttpRequest.responseText",
+        )
+        self.assertEqual(
+            correlacao.metadados["sink"],
+            "innerHTML",
+        )
+        self.assertEqual(
+            correlacao.metadados["variavel"],
+            "resultado",
+        )
