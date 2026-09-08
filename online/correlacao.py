@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -244,6 +244,43 @@ def serializar_correlacoes(
     ]
 
 
+def _extrair_variavel_da_fonte(
+    conteudo: str,
+    fonte_tipo: str,
+) -> str | None:
+    """
+    Identifica uma variável atribuída diretamente a uma fonte conhecida.
+
+    Exemplos reconhecidos:
+
+        const resposta = xhr.response;
+        let dados = xhr.response;
+        var resultado = xhr.response;
+
+    A análise é puramente estática.
+    """
+
+    if not conteudo or not fonte_tipo:
+        return None
+
+    if fonte_tipo == "XMLHttpRequest.response":
+        padrao = (
+            r"\b(?:const|let|var)\s+"
+            r"([A-Za-z_$][\w$]*)\s*=\s*"
+            r"[A-Za-z_$][\w$]*\.response\b"
+        )
+
+        correspondencia = re.search(
+            padrao,
+            conteudo,
+        )
+
+        if correspondencia:
+            return correspondencia.group(1)
+
+    return None
+
+
 def correlacionar_javascript(
     analises: list[dict[str, Any]],
 ) -> list[Correlacao]:
@@ -345,39 +382,95 @@ def correlacionar_javascript(
                     and sink_linha == fonte_linha
                 )
 
-                if not mesma_linha:
+                if mesma_linha:
+                    resultado.append(
+                        Correlacao(
+                            identificador=(
+                                "CORR-JS-DOM-SOURCE-SINK"
+                            ),
+                            titulo=(
+                                "Cadeia estática "
+                                "fonte → DOM sink observada"
+                            ),
+                            categoria="javascript",
+                            severidade="baixo",
+                            confianca="ALTA",
+                            observacao=(
+                                "Foi observada, estaticamente, "
+                                "uma fonte de dados associada "
+                                "a um DOM sink na mesma linha. "
+                                "Isso não confirma uma "
+                                "vulnerabilidade e requer "
+                                "revisão do fluxo de dados."
+                            ),
+                            recomendacao=(
+                                "Revisar a origem, o tratamento "
+                                "e a sanitização dos dados antes "
+                                "de sua utilização no DOM."
+                            ),
+                            metadados={
+                                "origem": origem,
+                                "url": url,
+                                "sink": sink_tipo,
+                                "source": fonte_tipo,
+                                "linha_sink": sink_linha,
+                                "linha_source": fonte_linha,
+                                "conteudo_sink": sink_conteudo,
+                                "conteudo_source": fonte_conteudo,
+                            },
+                        )
+                    )
+                    continue
+
+                variavel = _extrair_variavel_da_fonte(
+                    fonte_conteudo,
+                    fonte_tipo,
+                )
+
+                if not variavel:
+                    continue
+
+                variavel_no_sink = re.search(
+                    rf"\b{re.escape(variavel)}\b",
+                    sink_conteudo,
+                )
+
+                if not variavel_no_sink:
                     continue
 
                 resultado.append(
                     Correlacao(
                         identificador=(
-                            "CORR-JS-DOM-SOURCE-SINK"
+                            "CORR-JS-FLUXO-DOM-SOURCE-SINK"
                         ),
                         titulo=(
-                            "Cadeia estática "
-                            "fonte → DOM sink observada"
+                            "Fluxo estático "
+                            "fonte → variável → DOM sink"
                         ),
                         categoria="javascript",
                         severidade="baixo",
                         confianca="ALTA",
                         observacao=(
-                            "Foi observada, estaticamente, "
-                            "uma fonte de dados associada "
-                            "a um DOM sink na mesma linha. "
-                            "Isso não confirma uma "
-                            "vulnerabilidade e requer "
-                            "revisão do fluxo de dados."
+                            "Foi identificado, estaticamente, "
+                            "um fluxo em que uma variável recebe "
+                            "dados de uma fonte conhecida e "
+                            "posteriormente é utilizada em um "
+                            "DOM sink. Isso não confirma uma "
+                            "vulnerabilidade e requer revisão "
+                            "manual do fluxo de dados."
                         ),
                         recomendacao=(
-                            "Revisar a origem, o tratamento "
-                            "e a sanitização dos dados antes "
-                            "de sua utilização no DOM."
+                            "Revisar a origem dos dados, as "
+                            "transformações realizadas sobre a "
+                            "variável e a sanitização antes do "
+                            "uso no DOM."
                         ),
                         metadados={
                             "origem": origem,
                             "url": url,
                             "sink": sink_tipo,
                             "source": fonte_tipo,
+                            "variavel": variavel,
                             "linha_sink": sink_linha,
                             "linha_source": fonte_linha,
                             "conteudo_sink": sink_conteudo,
