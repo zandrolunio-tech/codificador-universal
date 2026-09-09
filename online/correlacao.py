@@ -3,6 +3,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from online.rastreador_javascript import (
+    explicar_cadeia_variaveis,
+)
+
 
 NIVEIS = {
     "informativo": 1,
@@ -631,6 +635,11 @@ def correlacionar_javascript(
                             "source": fonte_tipo,
                             "variavel": variavel_sink,
                             "cadeia_variaveis": cadeia_variaveis,
+                            "explicacao_cadeia": (
+                                explicar_cadeia_variaveis(
+                                    cadeia_variaveis
+                                )
+                            ),
                             "linha_sink": sink_linha,
                             "linha_source": fonte_linha,
                             "conteudo_sink": sink_conteudo,

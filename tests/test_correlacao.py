@@ -330,6 +330,69 @@ class TestCorrelacaoJavaScript(unittest.TestCase):
             "dados",
         )
 
+    def test_correlacao_inclui_explicacao_da_cadeia(self):
+        analises = [
+            {
+                "origem": "inline",
+                "tipo": "script",
+                "url": "",
+                "conteudo": (
+                    "const resposta = xhr.responseText;\n"
+                    "const dados = resposta;\n"
+                    "const corpo = dados;\n"
+                    "const valor = corpo;\n"
+                    "element.innerHTML = valor;"
+                ),
+                "analise": {
+                    "dom_sinks": [
+                        {
+                            "tipo": "innerHTML",
+                            "linha": 5,
+                            "conteudo": "element.innerHTML = valor;",
+                        }
+                    ],
+                    "fontes_dados": [
+                        {
+                            "tipo": "XMLHttpRequest.responseText",
+                            "linha": 1,
+                            "conteudo": "const resposta = xhr.responseText;",
+                        }
+                    ],
+                },
+            }
+        ]
+
+        resultado = correlacionar_javascript(analises)
+
+        self.assertEqual(len(resultado), 1)
+
+        explicacao = resultado[0].metadados["explicacao_cadeia"]
+
+        self.assertEqual(
+            explicacao["origem"],
+            "resposta",
+        )
+        self.assertEqual(
+            explicacao["destino"],
+            "valor",
+        )
+        self.assertEqual(
+            explicacao["total_etapas"],
+            3,
+        )
+        self.assertEqual(
+            explicacao["fluxo_visual"],
+            (
+                "resposta\n"
+                "   ↓\n"
+                "dados\n"
+                "   ↓\n"
+                "corpo\n"
+                "   ↓\n"
+                "valor"
+            ),
+        )
+
     def test_detecta_fluxo_fonte_varias_variaveis_para_dom_sink(self):
         analises = [
             {
