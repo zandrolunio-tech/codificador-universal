@@ -630,6 +630,7 @@ def correlacionar_javascript(
                             "sink": sink_tipo,
                             "source": fonte_tipo,
                             "variavel": variavel_sink,
+                            "cadeia_variaveis": cadeia_variaveis,
                             "linha_sink": sink_linha,
                             "linha_source": fonte_linha,
                             "conteudo_sink": sink_conteudo,
