@@ -293,6 +293,119 @@ def _extrair_variavel_da_fonte(
     return None
 
 
+def _extrair_variavel_da_variavel(
+    conteudo: str,
+    variavel_origem: str,
+) -> str | None:
+    """
+    Identifica uma variável que recebe diretamente o valor
+    de outra variável conhecida.
+
+    Exemplos reconhecidos:
+
+        const dados = resposta;
+        let dados = resposta;
+        var resultado = resposta;
+
+    A análise é puramente estática.
+    """
+
+    if not conteudo or not variavel_origem:
+        return None
+
+    padrao = (
+        r"\b(?:const|let|var)\s+"
+        r"([A-Za-z_$][\w$]*)\s*=\s*"
+        rf"{re.escape(variavel_origem)}\b"
+    )
+
+    correspondencia = re.search(
+        padrao,
+        conteudo,
+    )
+
+    if correspondencia:
+        return correspondencia.group(1)
+
+    return None
+
+
+def _encontrar_cadeia_variaveis(
+    codigo: str,
+    variavel_origem: str,
+    variavel_destino: str,
+) -> list[str]:
+    """
+    Verifica estaticamente se existe uma cadeia direta de
+    atribuições entre variáveis.
+
+    Exemplo:
+
+        const resposta = xhr.responseText;
+        const dados = resposta;
+        element.innerHTML = dados;
+
+    Para origem "resposta" e destino "dados",
+    retorna:
+
+        ["resposta", "dados"]
+
+    A análise é puramente estática e não executa JavaScript.
+    """
+
+    if not codigo:
+        return []
+
+    if not variavel_origem or not variavel_destino:
+        return []
+
+    if variavel_origem == variavel_destino:
+        return [variavel_origem]
+
+    linhas = codigo.splitlines()
+
+    padrao = re.compile(
+        r"\b(?:const|let|var)\s+"
+        r"([A-Za-z_$][\w$]*)\s*=\s*"
+        r"([A-Za-z_$][\w$]*)\b"
+    )
+
+    atribuicoes = {}
+
+    for linha in linhas:
+        correspondencia = padrao.search(linha)
+
+        if not correspondencia:
+            continue
+
+        destino = correspondencia.group(1)
+        origem = correspondencia.group(2)
+
+        atribuicoes[destino] = origem
+
+    cadeia = [variavel_destino]
+    atual = variavel_destino
+    visitadas = set()
+
+    while atual not in visitadas:
+        visitadas.add(atual)
+
+        origem = atribuicoes.get(atual)
+
+        if origem is None:
+            return []
+
+        cadeia.append(origem)
+
+        if origem == variavel_origem:
+            cadeia.reverse()
+            return cadeia
+
+        atual = origem
+
+    return []
+
+
 def correlacionar_javascript(
     analises: list[dict[str, Any]],
 ) -> list[Correlacao]:
@@ -349,6 +462,11 @@ def correlacionar_javascript(
 
         url = item.get(
             "url",
+            "",
+        )
+
+        codigo = item.get(
+            "conteudo",
             "",
         )
 
@@ -442,10 +560,39 @@ def correlacionar_javascript(
                 if not variavel:
                     continue
 
+                variavel_sink = variavel
+
                 variavel_no_sink = re.search(
-                    rf"\b{re.escape(variavel)}\b",
+                    rf"\b{re.escape(variavel_sink)}\b",
                     sink_conteudo,
                 )
+
+                cadeia_variaveis = [variavel]
+
+                if not variavel_no_sink and codigo:
+                    variaveis_no_sink = re.findall(
+                        r"\b[A-Za-z_$][\w$]*\b",
+                        sink_conteudo,
+                    )
+
+                    for variavel_candidata in variaveis_no_sink:
+                        cadeia = _encontrar_cadeia_variaveis(
+                            codigo,
+                            variavel,
+                            variavel_candidata,
+                        )
+
+                        if cadeia:
+                            cadeia_variaveis = cadeia
+                            variavel_sink = cadeia[-1]
+
+                            variavel_no_sink = re.search(
+                                rf"\b{re.escape(variavel_sink)}\b",
+                                sink_conteudo,
+                            )
+
+                            if variavel_no_sink:
+                                break
 
                 if not variavel_no_sink:
                     continue
@@ -482,7 +629,7 @@ def correlacionar_javascript(
                             "url": url,
                             "sink": sink_tipo,
                             "source": fonte_tipo,
-                            "variavel": variavel,
+                            "variavel": variavel_sink,
                             "linha_sink": sink_linha,
                             "linha_source": fonte_linha,
                             "conteudo_sink": sink_conteudo,

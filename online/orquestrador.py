@@ -125,6 +125,7 @@ def analisar_online(
                 "tipo": script.tipo,
                 "url": script.url,
                 "atributos": dict(script.atributos),
+                "conteudo": script.conteudo,
                 "analise": analise,
                 "strings": strings_normalizadas,
             })
