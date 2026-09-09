@@ -1,6 +1,7 @@
 import unittest
 
 from online.rastreador_javascript import (
+    analisar_transformacoes_javascript,
     explicar_cadeia_variaveis,
 )
 
@@ -92,6 +93,98 @@ class TestRastreadorJavaScript(unittest.TestCase):
         self.assertEqual(
             resultado["total_etapas"],
             0,
+        )
+
+
+    def test_detecta_json_parse(self):
+        codigo = "const dados = JSON.parse(resposta);"
+
+        resultado = analisar_transformacoes_javascript(codigo)
+
+        self.assertEqual(
+            resultado,
+            [
+                {
+                    "tipo": "transformacao",
+                    "operacao": "JSON.parse",
+                    "entrada": "resposta",
+                    "saida": "dados",
+                }
+            ],
+        )
+
+    def test_detecta_acesso_propriedade(self):
+        codigo = "const nome = dados.user.name;"
+
+        resultado = analisar_transformacoes_javascript(codigo)
+
+        self.assertEqual(
+            resultado,
+            [
+                {
+                    "tipo": "propriedade",
+                    "operacao": "dados.user.name",
+                    "entrada": "dados",
+                    "propriedade": "user.name",
+                    "saida": "nome",
+                }
+            ],
+        )
+
+    def test_mantem_ordem_das_transformacoes(self):
+        codigo = """
+const nome = dados.user.name;
+const dados = JSON.parse(resposta);
+"""
+
+        resultado = analisar_transformacoes_javascript(codigo)
+
+        self.assertEqual(
+            resultado,
+            [
+                {
+                    "tipo": "propriedade",
+                    "operacao": "dados.user.name",
+                    "entrada": "dados",
+                    "propriedade": "user.name",
+                    "saida": "nome",
+                },
+                {
+                    "tipo": "transformacao",
+                    "operacao": "JSON.parse",
+                    "entrada": "resposta",
+                    "saida": "dados",
+                },
+            ],
+        )
+
+
+    def test_detecta_transformacoes_em_cadeia(self):
+        codigo = """
+const resposta = xhr.responseText;
+const dados = JSON.parse(resposta);
+const nome = dados.user.name;
+"""
+
+        resultado = analisar_transformacoes_javascript(codigo)
+
+        self.assertEqual(
+            resultado,
+            [
+                {
+                    "tipo": "transformacao",
+                    "operacao": "JSON.parse",
+                    "entrada": "resposta",
+                    "saida": "dados",
+                },
+                {
+                    "tipo": "propriedade",
+                    "operacao": "dados.user.name",
+                    "entrada": "dados",
+                    "propriedade": "user.name",
+                    "saida": "nome",
+                },
+            ],
         )
 
 

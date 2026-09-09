@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from online.rastreador_javascript import (
+    analisar_transformacoes_javascript,
     explicar_cadeia_variaveis,
 )
 
@@ -410,6 +411,77 @@ def _encontrar_cadeia_variaveis(
     return []
 
 
+def _encontrar_cadeia_com_transformacoes(
+    codigo: str,
+    variavel_origem: str,
+    variavel_destino: str,
+) -> list[str]:
+    """
+    Encontra uma cadeia estática que pode conter transformações
+    identificadas pelo rastreador JavaScript.
+
+    Exemplo:
+
+        const resposta = xhr.responseText;
+        const dados = JSON.parse(resposta);
+        const nome = dados.user.name;
+
+    Para origem "resposta" e destino "nome", retorna:
+
+        ["resposta", "dados", "nome"]
+
+    A análise é puramente estática.
+    """
+
+    if not codigo or not variavel_origem or not variavel_destino:
+        return []
+
+    cadeia_direta = _encontrar_cadeia_variaveis(
+        codigo,
+        variavel_origem,
+        variavel_destino,
+    )
+
+    if cadeia_direta:
+        return cadeia_direta
+
+    transformacoes = analisar_transformacoes_javascript(codigo)
+
+    if not transformacoes:
+        return []
+
+    ligacoes: dict[str, str] = {}
+
+    for transformacao in transformacoes:
+        entrada = transformacao.get("entrada")
+        saida = transformacao.get("saida")
+
+        if entrada and saida:
+            ligacoes[saida] = entrada
+
+    atual = variavel_destino
+    cadeia = [atual]
+    visitadas = set()
+
+    while atual not in visitadas:
+        visitadas.add(atual)
+
+        origem = ligacoes.get(atual)
+
+        if origem is None:
+            break
+
+        cadeia.append(origem)
+
+        if origem == variavel_origem:
+            cadeia.reverse()
+            return cadeia
+
+        atual = origem
+
+    return []
+
+
 def correlacionar_javascript(
     analises: list[dict[str, Any]],
 ) -> list[Correlacao]:
@@ -580,7 +652,7 @@ def correlacionar_javascript(
                     )
 
                     for variavel_candidata in variaveis_no_sink:
-                        cadeia = _encontrar_cadeia_variaveis(
+                        cadeia = _encontrar_cadeia_com_transformacoes(
                             codigo,
                             variavel,
                             variavel_candidata,

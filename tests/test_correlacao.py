@@ -456,3 +456,69 @@ class TestCorrelacaoJavaScript(unittest.TestCase):
                 "valor",
             ],
         )
+
+    def test_detecta_fluxo_com_transformacao_json_e_propriedade(self):
+        analises = [
+            {
+                "origem": "inline",
+                "tipo": "script",
+                "url": "",
+                "conteudo": (
+                    "const resposta = xhr.responseText;\n"
+                    "const dados = JSON.parse(resposta);\n"
+                    "const nome = dados.user.name;\n"
+                    "element.innerHTML = nome;"
+                ),
+                "analise": {
+                    "dom_sinks": [
+                        {
+                            "tipo": "innerHTML",
+                            "linha": 4,
+                            "conteudo": "element.innerHTML = nome;",
+                        }
+                    ],
+                    "fontes_dados": [
+                        {
+                            "tipo": "XMLHttpRequest.responseText",
+                            "linha": 1,
+                            "conteudo": "const resposta = xhr.responseText;",
+                        }
+                    ],
+                },
+            }
+        ]
+
+        resultado = correlacionar_javascript(analises)
+
+        self.assertEqual(len(resultado), 1)
+
+        correlacao = resultado[0]
+
+        self.assertEqual(
+            correlacao.identificador,
+            "CORR-JS-FLUXO-DOM-SOURCE-SINK",
+        )
+        self.assertEqual(
+            correlacao.metadados["source"],
+            "XMLHttpRequest.responseText",
+        )
+        self.assertEqual(
+            correlacao.metadados["sink"],
+            "innerHTML",
+        )
+        self.assertEqual(
+            correlacao.metadados["variavel"],
+            "nome",
+        )
+        self.assertEqual(
+            correlacao.metadados["cadeia_variaveis"],
+            [
+                "resposta",
+                "dados",
+                "nome",
+            ],
+        )
+        self.assertIn(
+            "resposta",
+            correlacao.metadados["explicacao_cadeia"]["cadeia"],
+        )
