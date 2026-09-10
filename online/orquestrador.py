@@ -60,6 +60,18 @@ def analisar_online(
     for resposta in resultado.respostas:
         analise = analisar_resposta(resposta)
 
+        http_bruto = analise.get("http", {})
+
+        if http_bruto:
+            if not resultado.http_bruto:
+                resultado.http_bruto = {
+                    "respostas": []
+                }
+
+            resultado.http_bruto["respostas"].append(
+                http_bruto
+            )
+
         status = analise.get("status_code")
 
         if status is not None:
