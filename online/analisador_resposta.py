@@ -99,9 +99,8 @@ def _detectar_cookies(resposta):
 
         for atributo in partes[1:]:
             if "=" in atributo:
-                chave, valor = atributo.split(
-                    "=", 1
-                )
+                chave, valor = atributo.split("=", 1)
+
                 atributos[
                     _normalizar_nome(chave)
                 ] = valor.strip()
@@ -130,9 +129,7 @@ def _detectar_autenticacao(headers):
             {
                 "tipo": "Authorization",
                 "esquema": (
-                    authorization.split(
-                        None, 1
-                    )[0]
+                    authorization.split(None, 1)[0]
                     if authorization
                     else ""
                 ),
@@ -181,6 +178,76 @@ def _detectar_tecnologias(headers):
             tecnologias.append(nome)
 
     return sorted(set(tecnologias))
+
+
+def _analisar_http_bruto(resposta, headers):
+    """
+    Extrai metadados observáveis diretamente da resposta HTTP.
+
+    Esta função não realiza novas requisições.
+    Trabalha exclusivamente sobre a resposta já coletada.
+    """
+
+    nomes_headers = sorted(headers.keys())
+
+    headers_x = {
+        nome: valor
+        for nome, valor in headers.items()
+        if nome.startswith("x-")
+    }
+
+    resultado = {
+        "url_final": resposta.url,
+        "status_code": resposta.status_code,
+        "reason": resposta.reason,
+        "http_version": resposta.http_version,
+        "content_type": resposta.content_type,
+        "tamanho": resposta.tamanho,
+        "tempo_resposta_ms": resposta.tempo_resposta_ms,
+        "quantidade_headers": len(nomes_headers),
+        "headers": nomes_headers,
+        "headers_x": headers_x,
+        "redirecionamentos": list(
+            resposta.redirecionamentos
+        ),
+        "quantidade_redirecionamentos": len(
+            resposta.redirecionamentos
+        ),
+        "content_length": headers.get(
+            "content-length",
+            "",
+        ),
+        "etag": headers.get(
+            "etag",
+            "",
+        ),
+        "last_modified": headers.get(
+            "last-modified",
+            "",
+        ),
+        "cache_control": headers.get(
+            "cache-control",
+            "",
+        ),
+        "age": headers.get(
+            "age",
+            "",
+        ),
+        "via": headers.get(
+            "via",
+            "",
+        ),
+        "server": headers.get(
+            "server",
+            "",
+        ),
+        "location": headers.get(
+            "location",
+            "",
+        ),
+    }
+
+    return resultado
 
 
 def _analisar_headers(headers):
@@ -321,34 +388,27 @@ def _criar_evidencias(
     return evidencias
 
 
-def analisar_resposta(resposta: HTTPResposta):
+def analisar_resposta(resposta):
     """
-    Analisa passivamente uma resposta HTTP já obtida.
+    Analisa uma resposta HTTP já coletada.
 
-    Não realiza novas requisições.
-    Não testa exploração.
-    Não altera a resposta original.
+    Não realiza novas conexões nem novas requisições.
     """
 
     headers = _headers_dict(resposta)
 
-    cookies = _detectar_cookies(resposta)
-
     json_info = _detectar_json(resposta)
-
     html_info = _detectar_html(resposta)
+    cookies = _detectar_cookies(resposta)
+    autenticacao = _detectar_autenticacao(headers)
+    tecnologias = _detectar_tecnologias(headers)
 
-    autenticacao = _detectar_autenticacao(
-        headers
+    http_bruto = _analisar_http_bruto(
+        resposta,
+        headers,
     )
 
-    tecnologias = _detectar_tecnologias(
-        headers
-    )
-
-    headers_info = _analisar_headers(
-        headers
-    )
+    headers_info = _analisar_headers(headers)
 
     evidencias = _criar_evidencias(
         resposta,
@@ -360,21 +420,15 @@ def analisar_resposta(resposta: HTTPResposta):
     )
 
     return {
-        "url": resposta.url,
+        "http": http_bruto,
         "status_code": resposta.status_code,
         "reason": resposta.reason,
         "http_version": resposta.http_version,
-        "tempo_resposta_ms": (
-            resposta.tempo_resposta_ms
-        ),
         "headers": headers_info,
-        "cookies": cookies,
-        "json": json_info,
         "html": html_info,
+        "json": json_info,
+        "cookies": cookies,
         "autenticacao": autenticacao,
         "tecnologias": tecnologias,
-        "redirecionamentos": (
-            resposta.redirecionamentos
-        ),
         "evidencias": evidencias,
     }
