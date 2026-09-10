@@ -25,7 +25,54 @@ class HTTPResposta:
 @dataclass
 class CookieObservado:
     nome: str
+    valor: str = ""
     atributos: dict[str, Any] = field(default_factory=dict)
+
+    # Origem da observação
+    url: str = ""
+    header_original: str = ""
+
+    # Informações do valor
+    valor_mascarado: str = ""
+    tamanho_valor: int = 0
+
+    # Atributos normalizados
+    dominio: str = ""
+    path: str = ""
+    expires: str = ""
+    max_age: int | None = None
+    secure: bool = False
+    httponly: bool = False
+    samesite: str = ""
+    priority: str = ""
+    partitioned: bool = False
+    sameparty: bool = False
+    outros_atributos: dict[str, Any] = field(default_factory=dict)
+
+    # Classificação
+    tipo: str = ""
+    finalidade: str = ""
+    sensibilidade: str = ""
+    confianca: str = ""
+
+    # Formato aparente do valor
+    formato_valor: str = ""
+    caracteristicas_valor: list[str] = field(default_factory=list)
+
+    # Prefixos especiais
+    prefixo: str = ""
+
+    # Indicadores de segurança/análise
+    indicadores: list[str] = field(default_factory=list)
+
+    # Histórico da observação
+    ocorrencias: list[dict[str, Any]] = field(default_factory=list)
+
+    # Evidências técnicas
+    evidencias: list[dict[str, Any]] = field(default_factory=list)
+
+
+
 @dataclass
 class JavaScriptExtraido:
     origem: str
@@ -111,6 +158,7 @@ class OnlineResultado:
     sucesso: bool = False
     respostas: list[HTTPResposta] = field(default_factory=list)
     cookies: list[CookieObservado] = field(default_factory=list)
+    cookies_info: dict = field(default_factory=dict)
     tls: TLSResultado | None = None
     servicos: list[ServicoObservado] = field(default_factory=list)
     servidores: list[ServidorObservado] = field(default_factory=list)

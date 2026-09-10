@@ -78,43 +78,571 @@ def _detectar_html(resposta):
     }
 
 
+def _mascarar_valor_cookie(valor):
+    """
+    Produz uma representação segura do valor do cookie.
+
+    O valor original permanece disponível para análise técnica,
+    enquanto esta representação pode ser usada em relatórios.
+    """
+    if valor == "":
+        return ""
+
+    tamanho = len(valor)
+
+    if tamanho <= 4:
+        return "*" * tamanho
+
+    if tamanho <= 8:
+        return valor[:2] + ("*" * (tamanho - 4)) + valor[-2:]
+
+    return valor[:3] + ("*" * (tamanho - 6)) + valor[-3:]
+
+
+def _detectar_prefixo_cookie(nome):
+    """
+    Identifica prefixos especiais conhecidos em cookies.
+    """
+    if nome.startswith("__Host-Http-"):
+        return "__Host-Http-"
+
+    if nome.startswith("__Host-"):
+        return "__Host-"
+
+    if nome.startswith("__Secure-"):
+        return "__Secure-"
+
+    if nome.startswith("__Http-"):
+        return "__Http-"
+
+    return ""
+
+
+def _converter_max_age(valor):
+    """
+    Converte Max-Age para inteiro quando possível.
+    """
+    try:
+        return int(valor.strip())
+    except (TypeError, ValueError):
+        return None
+
+
+
+def _detectar_formato_cookie(valor):
+    """
+    Identifica formatos aparentes do valor sem tentar decodificar
+    ou quebrar segredos.
+    """
+    if not valor:
+        return {
+            "formato": "vazio",
+            "caracteristicas": ["valor_vazio"],
+        }
+
+    caracteristicas = []
+
+    if re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-"
+        r"[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-"
+        r"[0-9a-fA-F]{12}",
+        valor,
+    ):
+        return {
+            "formato": "UUID",
+            "caracteristicas": ["uuid"],
+        }
+
+    partes = valor.split(".")
+
+    if len(partes) == 3 and all(partes):
+        base64url = all(
+            re.fullmatch(r"[A-Za-z0-9_-]+", parte) is not None
+            for parte in partes
+        )
+
+        if base64url:
+            caracteristicas.extend(
+                ["tres_segmentos", "base64url_aparente"]
+            )
+
+            if partes[0] in {
+                "eyJhbGciOiJIUzI1NiJ9",
+                "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            } or valor.startswith("eyJ"):
+                return {
+                    "formato": "JWT",
+                    "caracteristicas": caracteristicas
+                    + ["jwt_aparente"],
+                }
+
+            return {
+                "formato": "token_estruturado",
+                "caracteristicas": caracteristicas,
+            }
+
+    if re.fullmatch(r"[0-9a-fA-F]+", valor):
+        if len(valor) >= 8 and len(valor) % 2 == 0:
+            return {
+                "formato": "hexadecimal",
+                "caracteristicas": ["hexadecimal"],
+            }
+
+    if re.fullmatch(r"[A-Za-z0-9_-]+={0,2}", valor):
+        if len(valor) >= 8:
+            caracteristicas.append("base64_aparente")
+
+    if caracteristicas:
+        return {
+            "formato": "base64_ou_base64url_aparente",
+            "caracteristicas": caracteristicas,
+        }
+
+    if re.fullmatch(r"[A-Za-z0-9]+", valor):
+        if len(valor) >= 16:
+            return {
+                "formato": "alfanumerico_aleatorio_aparente",
+                "caracteristicas": [
+                    "alfanumerico",
+                    "alta_entropia_aparente",
+                ],
+            }
+
+    if re.fullmatch(r"[A-Za-z0-9_-]+", valor):
+        if len(valor) >= 16:
+            return {
+                "formato": "identificador_aleatorio_aparente",
+                "caracteristicas": [
+                    "identificador",
+                    "alta_entropia_aparente",
+                ],
+            }
+
+    if "=" in valor or "&" in valor or ":" in valor:
+        return {
+            "formato": "estruturado",
+            "caracteristicas": ["estrutura_interna_aparente"],
+        }
+
+    return {
+        "formato": "texto",
+        "caracteristicas": [],
+    }
+
+
+def _classificar_cookie(nome, atributos):
+    """
+    Classifica o cookie por finalidade provável.
+
+    A classificação é heurística e não afirma a finalidade real
+    do cookie.
+    """
+    nome_lower = nome.lower()
+
+    indicadores = {
+        "auth": (
+            "auth",
+            "token",
+            "access_token",
+            "refresh_token",
+            "id_token",
+            "jwt",
+            "login",
+            "credential",
+        ),
+        "session": (
+            "session",
+            "sess",
+            "sid",
+            "jsessionid",
+            "phpsessid",
+            "laravel_session",
+            "connect.sid",
+        ),
+        "csrf": (
+            "csrf",
+            "xsrf",
+            "anti_csrf",
+            "antiforgery",
+        ),
+        "preference": (
+            "pref",
+            "preference",
+            "settings",
+            "locale",
+            "language",
+            "theme",
+        ),
+        "analytics": (
+            "analytics",
+            "ga",
+            "_ga",
+            "_gid",
+            "amplitude",
+            "mixpanel",
+        ),
+        "tracking": (
+            "track",
+            "tracking",
+            "visitor",
+            "fingerprint",
+            "ad",
+            "marketing",
+        ),
+    }
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["auth"]
+    ):
+        return "autenticacao", "potencialmente_auth"
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["session"]
+    ):
+        return "sessao", "potencialmente_sessao"
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["csrf"]
+    ):
+        return "csrf", "anti_csrf"
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["preference"]
+    ):
+        return "preferencia", "preferencia"
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["analytics"]
+    ):
+        return "analytics", "analytics"
+
+    if any(
+        termo in nome_lower
+        for termo in indicadores["tracking"]
+    ):
+        return "tracking", "tracking"
+
+    if "max-age" in atributos or "expires" in atributos:
+        return "persistente", "desconhecida"
+
+    return "sessao", "desconhecida"
+
+
+def _classificar_persistencia(expires, max_age):
+    """
+    Determina a persistência observável do cookie.
+    """
+    if max_age is not None:
+        if max_age <= 0:
+            return "expiracao_imediata"
+
+        return "persistente"
+
+    if expires:
+        return "persistente"
+
+    return "sessao"
+
+
+def _analisar_seguranca_cookie(
+    nome,
+    secure,
+    httponly,
+    samesite,
+    dominio,
+    path,
+    prefixo,
+    finalidade,
+    max_age,
+):
+    """
+    Gera indicadores passivos de segurança.
+    """
+    indicadores = []
+
+    nome_lower = nome.lower()
+    samesite_normalizado = samesite.strip().lower()
+
+    sensivel = finalidade in {
+        "potencialmente_auth",
+        "potencialmente_sessao",
+        "anti_csrf",
+    }
+
+    if sensivel and not httponly:
+        indicadores.append(
+            "cookie_potencialmente_sensivel_sem_httponly"
+        )
+
+    if sensivel and not secure:
+        indicadores.append(
+            "cookie_potencialmente_sensivel_sem_secure"
+        )
+
+    if samesite_normalizado == "none" and not secure:
+        indicadores.append(
+            "samesite_none_sem_secure"
+        )
+
+    if not samesite_normalizado:
+        indicadores.append(
+            "samesite_nao_informado"
+        )
+
+    if dominio:
+        dominio_normalizado = dominio.lower().strip()
+
+        if dominio_normalizado.startswith("."):
+            indicadores.append(
+                "dominio_explicitamente_amplo"
+            )
+
+    if prefixo == "__Host-":
+        if dominio:
+            indicadores.append(
+                "prefixo_host_com_domain"
+            )
+
+        if path and path != "/":
+            indicadores.append(
+                "prefixo_host_com_path_invalido"
+            )
+
+        if not secure:
+            indicadores.append(
+                "prefixo_host_sem_secure"
+            )
+
+    elif prefixo == "__Secure-" and not secure:
+        indicadores.append(
+            "prefixo_secure_sem_secure"
+        )
+
+    if max_age is not None and max_age < 0:
+        indicadores.append(
+            "max_age_negativo"
+        )
+
+    if (
+        "session" in nome_lower
+        and not httponly
+    ):
+        indicadores.append(
+            "nome_indica_sessao_sem_httponly"
+        )
+
+    return indicadores
+
+
+def _analisar_cookie(cookie):
+    """
+    Completa a análise de um CookieObservado.
+    """
+    formato = _detectar_formato_cookie(cookie.valor)
+
+    tipo, finalidade = _classificar_cookie(
+        cookie.nome,
+        cookie.atributos,
+    )
+
+    persistencia = _classificar_persistencia(
+        cookie.expires,
+        cookie.max_age,
+    )
+
+    if persistencia == "persistente":
+        tipo = "persistente"
+
+    elif persistencia == "sessao":
+        tipo = "sessao"
+
+    indicadores = _analisar_seguranca_cookie(
+        nome=cookie.nome,
+        secure=cookie.secure,
+        httponly=cookie.httponly,
+        samesite=cookie.samesite,
+        dominio=cookie.dominio,
+        path=cookie.path,
+        prefixo=cookie.prefixo,
+        finalidade=finalidade,
+        max_age=cookie.max_age,
+    )
+
+    if (
+        finalidade in {
+            "potencialmente_auth",
+            "potencialmente_sessao",
+        }
+        or formato["formato"] in {
+            "JWT",
+            "token_estruturado",
+            "alfanumerico_aleatorio_aparente",
+            "identificador_aleatorio_aparente",
+        }
+    ):
+        sensibilidade = "potencialmente_sensivel"
+    else:
+        sensibilidade = "normal"
+
+    cookie.tipo = tipo
+    cookie.finalidade = finalidade
+    cookie.sensibilidade = sensibilidade
+    cookie.formato_valor = formato["formato"]
+    cookie.caracteristicas_valor = formato["caracteristicas"]
+    cookie.indicadores = indicadores
+
+    if indicadores:
+        cookie.confianca = "MEDIA"
+    else:
+        cookie.confianca = "ALTA"
+
+    return cookie
+
 def _detectar_cookies(resposta):
+    """
+    Extrai cookies Set-Cookie de uma resposta HTTP.
+
+    O parser preserva:
+    - nome;
+    - valor completo;
+    - header original;
+    - URL da resposta;
+    - atributos conhecidos;
+    - atributos desconhecidos;
+    - características básicas de segurança;
+    - prefixos especiais.
+
+    Não modifica nem tenta validar ou explorar o valor do cookie.
+    """
     cookies = []
 
     for header in resposta.headers:
         if _normalizar_nome(header.nome) != "set-cookie":
             continue
 
-        partes = [
-            parte.strip()
-            for parte in header.valor.split(";")
-        ]
+        valor_header = header.valor.strip()
 
-        if not partes or "=" not in partes[0]:
+        if not valor_header:
             continue
 
-        nome, _ = partes[0].split("=", 1)
+        partes = [
+            parte.strip()
+            for parte in valor_header.split(";")
+        ]
+
+        if not partes:
+            continue
+
+        primeira_parte = partes[0]
+
+        if "=" not in primeira_parte:
+            continue
+
+        nome, valor = primeira_parte.split("=", 1)
+
+        nome = nome.strip()
+        valor = valor.strip()
+
+        if not nome:
+            continue
 
         atributos = {}
+        dominio = ""
+        path = ""
+        expires = ""
+        max_age = None
+        secure = False
+        httponly = False
+        samesite = ""
+        priority = ""
+        partitioned = False
+        sameparty = False
+        outros_atributos = {}
 
         for atributo in partes[1:]:
+            atributo = atributo.strip()
+
+            if not atributo:
+                continue
+
             if "=" in atributo:
-                chave, valor = atributo.split("=", 1)
-
-                atributos[
-                    _normalizar_nome(chave)
-                ] = valor.strip()
+                chave, valor_atributo = atributo.split("=", 1)
+                chave = _normalizar_nome(chave)
+                valor_atributo = valor_atributo.strip()
             else:
-                atributos[
-                    _normalizar_nome(atributo)
-                ] = True
+                chave = _normalizar_nome(atributo)
+                valor_atributo = True
 
-        cookies.append(
-            CookieObservado(
-                nome=nome.strip(),
-                atributos=atributos,
-            )
+            if not chave:
+                continue
+
+            atributos[chave] = valor_atributo
+
+            if chave == "domain":
+                dominio = str(valor_atributo)
+
+            elif chave == "path":
+                path = str(valor_atributo)
+
+            elif chave == "expires":
+                expires = str(valor_atributo)
+
+            elif chave == "max-age":
+                max_age = _converter_max_age(valor_atributo)
+
+            elif chave == "secure":
+                secure = True
+
+            elif chave == "httponly":
+                httponly = True
+
+            elif chave == "samesite":
+                samesite = str(valor_atributo)
+
+            elif chave == "priority":
+                priority = str(valor_atributo)
+
+            elif chave == "partitioned":
+                partitioned = True
+
+            elif chave == "sameparty":
+                sameparty = True
+
+            else:
+                outros_atributos[chave] = valor_atributo
+
+        prefixo = _detectar_prefixo_cookie(nome)
+
+        cookie = CookieObservado(
+            nome=nome,
+            valor=valor,
+            atributos=atributos,
+            url=getattr(resposta, "url", ""),
+            header_original=valor_header,
+            valor_mascarado=_mascarar_valor_cookie(valor),
+            tamanho_valor=len(valor),
+            dominio=dominio,
+            path=path,
+            expires=expires,
+            max_age=max_age,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+            priority=priority,
+            partitioned=partitioned,
+            sameparty=sameparty,
+            outros_atributos=outros_atributos,
+            prefixo=prefixo,
         )
+
+        _analisar_cookie(cookie)
+
+        cookies.append(cookie)
 
     return cookies
 

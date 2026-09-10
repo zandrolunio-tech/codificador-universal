@@ -13,6 +13,7 @@ from .correlacao import (
 from .decodificador_javascript import extrair_strings_javascript
 from .normalizador_javascript import normalizar_string_javascript
 from .analisador_portas import analisar_portas
+from .inventario_cookies import construir_inventario_cookies
 from .inventario_superficie import construir_inventario
 from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
@@ -57,8 +58,11 @@ def analisar_online(
     # ---------------------------------------------------------
     # 2. ANÁLISE DAS RESPOSTAS HTTP
     # ---------------------------------------------------------
+    analises_respostas = []
+
     for resposta in resultado.respostas:
         analise = analisar_resposta(resposta)
+        analises_respostas.append(analise)
 
         http_bruto = analise.get("http", {})
 
@@ -162,7 +166,39 @@ def analisar_online(
     )
 
     # ---------------------------------------------------------
-    # 2.6. HEADERS HTTP OBSERVADOS
+    # 2.6. CONSOLIDACAO DE COOKIES
+    # ---------------------------------------------------------
+    cookies_analisados = []
+
+    analises_cookies = []
+
+    for analise in analises_respostas:
+        cookies_resposta = analise.get(
+            "cookies",
+            [],
+        )
+
+        cookies_analisados.extend(
+            cookies_resposta
+        )
+
+        analises_cookies.append(
+            {
+                "cookies": cookies_resposta,
+            }
+        )
+
+    resultado.cookies = cookies_analisados
+
+    resultado.cookies_info = (
+        construir_inventario_cookies(
+            respostas=resultado.respostas,
+            analises=analises_cookies,
+        )
+    )
+
+    # ---------------------------------------------------------
+    # 2.7. HEADERS HTTP OBSERVADOS
     # ---------------------------------------------------------
     headers_observados = []
 
