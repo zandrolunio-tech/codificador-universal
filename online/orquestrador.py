@@ -162,6 +162,31 @@ def analisar_online(
     )
 
     # ---------------------------------------------------------
+    # 2.6. HEADERS HTTP OBSERVADOS
+    # ---------------------------------------------------------
+    headers_observados = []
+
+    for resposta in resultado.respostas:
+        headers = {}
+
+        for header in resposta.headers:
+            nome = getattr(header, "nome", "")
+            valor = getattr(header, "valor", "")
+
+            if nome:
+                headers[nome.lower()] = valor
+
+        if headers:
+            headers_observados.append({
+                "url": resposta.url,
+                "headers": headers,
+            })
+
+    resultado.headers = {
+        "respostas": headers_observados,
+    }
+
+    # ---------------------------------------------------------
     # 3. ANÁLISE TLS
     # ---------------------------------------------------------
     tls_resultado = analisar_tls(

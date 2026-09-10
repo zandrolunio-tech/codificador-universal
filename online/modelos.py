@@ -119,3 +119,4 @@ class OnlineResultado:
     erros: list[str] = field(default_factory=list)
     metadados: dict[str, Any] = field(default_factory=dict)
     http_bruto: dict = field(default_factory=dict)
+    headers: dict = field(default_factory=dict)

@@ -38,6 +38,71 @@ class TestOrquestrador(unittest.TestCase):
     @patch("online.orquestrador.analisar_portas")
     @patch("online.orquestrador.analisar_tls")
     @patch("online.orquestrador.coletar")
+    def test_headers_http_sao_integrados_ao_resultado(
+        self,
+        mock_coletar,
+        mock_tls,
+        mock_portas,
+        mock_inventario,
+    ):
+        resposta = self.criar_resposta()
+
+        mock_coletar.return_value.sucesso = True
+        mock_coletar.return_value.respostas = [resposta]
+        mock_coletar.return_value.cookies = []
+        mock_coletar.return_value.erros = []
+
+        mock_tls.return_value = {
+            "detectado": False,
+            "sucesso": False,
+            "url": "https://exemplo.test/",
+            "erros": [],
+        }
+
+        mock_portas.return_value = []
+
+        mock_inventario.return_value = {
+            "alvo": "https://exemplo.test/",
+        }
+
+        resultado = analisar_online(
+            "https://exemplo.test/",
+            timeout=5,
+            analisar_certificado=True,
+        )
+
+        self.assertIn(
+            "respostas",
+            resultado.headers,
+        )
+
+        self.assertEqual(
+            len(resultado.headers["respostas"]),
+            1,
+        )
+
+        resposta_headers = resultado.headers["respostas"][0]
+
+        self.assertEqual(
+            resposta_headers["url"],
+            "https://exemplo.test/",
+        )
+
+        self.assertEqual(
+            resposta_headers["headers"]["server"],
+            "nginx/1.24.0",
+        )
+
+        self.assertEqual(
+            resposta_headers["headers"]["content-type"],
+            "text/html",
+        )
+
+
+    @patch("online.orquestrador.construir_inventario")
+    @patch("online.orquestrador.analisar_portas")
+    @patch("online.orquestrador.analisar_tls")
+    @patch("online.orquestrador.coletar")
     def test_fluxo_principal(
         self,
         mock_coletar,
