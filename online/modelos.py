@@ -101,6 +101,44 @@ class JavaScriptAnalise:
     )
 
 @dataclass
+class HTMLAnalise:
+    url: str = ""
+    content_type: str = ""
+    tamanho: int = 0
+    charset: str = ""
+    detectado: bool = False
+    valido: bool | None = None
+    titulo: str = ""
+    lang: str = ""
+    doctype: str = ""
+    profundidade: int = 0
+
+    metas: list[dict[str, Any]] = field(default_factory=list)
+    links: list[dict[str, Any]] = field(default_factory=list)
+    scripts: list[dict[str, Any]] = field(default_factory=list)
+    estilos: list[dict[str, Any]] = field(default_factory=list)
+    imagens: list[dict[str, Any]] = field(default_factory=list)
+    iframes: list[dict[str, Any]] = field(default_factory=list)
+    formularios: list[dict[str, Any]] = field(default_factory=list)
+    campos_formulario: list[dict[str, Any]] = field(default_factory=list)
+    recursos: list[dict[str, Any]] = field(default_factory=list)
+    elementos_importantes: list[dict[str, Any]] = field(default_factory=list)
+
+    comentarios: list[str] = field(default_factory=list)
+    elementos_ocultos: list[dict[str, Any]] = field(default_factory=list)
+
+    indicadores: list[dict[str, Any]] = field(default_factory=list)
+    tecnologias: list[dict[str, Any]] = field(default_factory=list)
+    dados_potencialmente_sensiveis: list[dict[str, Any]] = field(
+        default_factory=list
+    )
+    evidencias: list[dict[str, Any]] = field(default_factory=list)
+
+    estatisticas: dict[str, int] = field(default_factory=dict)
+    observacoes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TLSResultado:
     disponivel: bool = False
     protocolo: str = ""

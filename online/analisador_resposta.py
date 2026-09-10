@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 
 from .modelos import (
     CookieObservado,
     Evidencia,
     HTTPResposta,
 )
+from .analisador_html import analisar_html
 
 
 def _normalizar_nome(nome):
@@ -63,19 +65,18 @@ def _detectar_json(resposta):
 
 
 def _detectar_html(resposta):
-    content_type = resposta.content_type.lower()
-    corpo = resposta.corpo.lower()
+    """
+    Analisa estaticamente o HTML da resposta já coletada.
 
-    detectado = (
-        "text/html" in content_type
-        or "<html" in corpo
-        or "<!doctype html" in corpo
+    Não realiza novas requisições e não executa JavaScript.
+    """
+    resultado = analisar_html(
+        resposta.corpo,
+        url=resposta.url,
+        content_type=resposta.content_type,
     )
 
-    return {
-        "detectado": detectado,
-        "content_type": resposta.content_type,
-    }
+    return asdict(resultado)
 
 
 def _mascarar_valor_cookie(valor):
