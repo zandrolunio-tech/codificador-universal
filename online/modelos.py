@@ -207,3 +207,4 @@ class OnlineResultado:
     http_bruto: dict = field(default_factory=dict)
     headers: dict = field(default_factory=dict)
     javascript: list[dict[str, Any]] = field(default_factory=list)
+    javascript_info: dict[str, Any] = field(default_factory=dict)

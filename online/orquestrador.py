@@ -163,6 +163,10 @@ def analisar_online(
 
     resultado.javascript = javascript_resultados
 
+    resultado.javascript_info = _consolidar_javascript(
+        javascript_resultados
+    )
+
     resultado.metadados["javascript"] = (
         javascript_resultados
     )
@@ -414,6 +418,215 @@ def analisar_online(
 
     return resultado
 
+
+
+def _consolidar_javascript(
+    javascript_resultados: list[dict],
+) -> dict:
+    """
+    Consolida as análises estáticas de JavaScript.
+
+    Não executa JavaScript e não realiza novas requisições.
+    Apenas organiza os resultados já produzidos pelo analisador.
+    """
+    info = {
+        "respostas": [],
+        "scripts": [],
+        "total_scripts": 0,
+        "scripts_analisados": 0,
+        "scripts_inline": 0,
+        "scripts_externos": 0,
+        "modulos": 0,
+        "funcoes": [],
+        "imports": [],
+        "exports": [],
+        "urls": [],
+        "endpoints": [],
+        "websockets": [],
+        "apis": {},
+        "frameworks": [],
+        "caracteristicas": {},
+        "fontes_dados": [],
+        "dom_sinks": [],
+        "padroes_sensiveis": {},
+        "strings": [],
+        "inspecoes_profunda": [],
+    }
+
+    def adicionar_unico(lista: list, valor) -> None:
+        if valor not in lista:
+            lista.append(valor)
+
+    for resposta in javascript_resultados:
+        url_resposta = resposta.get("url", "")
+
+        info["respostas"].append({
+            "url": url_resposta,
+            "scripts": len(resposta.get("scripts", [])),
+            "analises": len(resposta.get("analises", [])),
+        })
+
+        scripts = resposta.get("scripts", [])
+        analises = resposta.get("analises", [])
+
+        info["total_scripts"] += len(scripts)
+
+        for script in scripts:
+            origem = script.get("origem", "")
+            tipo = script.get("tipo", "")
+            url = script.get("url", "")
+
+            if origem == "script_inline":
+                info["scripts_inline"] += 1
+            elif origem == "script_src":
+                info["scripts_externos"] += 1
+
+            if tipo == "module":
+                info["modulos"] += 1
+
+            info["scripts"].append({
+                "url_resposta": url_resposta,
+                "origem": origem,
+                "tipo": tipo,
+                "url": url,
+                "atributos": dict(
+                    script.get("atributos", {})
+                ),
+                "tamanho": len(
+                    script.get("conteudo", "")
+                ),
+            })
+
+        for entrada in analises:
+            analise = entrada.get("analise", {})
+
+            if not analise.get("detectado"):
+                continue
+
+            info["scripts_analisados"] += 1
+
+            for campo in (
+                "funcoes",
+                "imports",
+                "exports",
+                "urls",
+                "endpoints",
+                "websockets",
+                "frameworks",
+            ):
+                for valor in analise.get(campo, []):
+                    adicionar_unico(
+                        info[campo],
+                        valor,
+                    )
+
+            for valor in entrada.get("strings", []):
+                if valor not in info["strings"]:
+                    info["strings"].append(valor)
+
+            apis = analise.get("apis", {})
+            for nome_api, valores in apis.items():
+                if nome_api not in info["apis"]:
+                    info["apis"][nome_api] = []
+
+                for valor in valores:
+                    adicionar_unico(
+                        info["apis"][nome_api],
+                        valor,
+                    )
+
+            caracteristicas = analise.get(
+                "caracteristicas",
+                {},
+            )
+
+            for nome, valor in caracteristicas.items():
+                if nome not in info["caracteristicas"]:
+                    info["caracteristicas"][nome] = bool(
+                        valor
+                    )
+                else:
+                    info["caracteristicas"][nome] = (
+                        info["caracteristicas"][nome]
+                        or bool(valor)
+                    )
+
+            for valor in analise.get(
+                "fontes_dados",
+                [],
+            ):
+                adicionar_unico(
+                    info["fontes_dados"],
+                    valor,
+                )
+
+            for valor in analise.get(
+                "dom_sinks",
+                [],
+            ):
+                adicionar_unico(
+                    info["dom_sinks"],
+                    valor,
+                )
+
+            padroes = analise.get(
+                "padroes_sensiveis",
+                {},
+            )
+
+            for nome, valores in padroes.items():
+                if nome not in info["padroes_sensiveis"]:
+                    info["padroes_sensiveis"][nome] = []
+
+                for valor in valores:
+                    adicionar_unico(
+                        info["padroes_sensiveis"][nome],
+                        valor,
+                    )
+
+            inspecao = analise.get(
+                "inspecao_profunda",
+                {},
+            )
+
+            if inspecao:
+                info["inspecoes_profunda"].append({
+                    "url": entrada.get("url", ""),
+                    "origem": entrada.get(
+                        "origem",
+                        "",
+                    ),
+                    "tamanho_bytes": inspecao.get(
+                        "tamanho_bytes",
+                        0,
+                    ),
+                    "urls_http": list(
+                        inspecao.get(
+                            "urls_http",
+                            [],
+                        )
+                    ),
+                    "urls_websocket": list(
+                        inspecao.get(
+                            "urls_websocket",
+                            [],
+                        )
+                    ),
+                    "metodos_http": dict(
+                        inspecao.get(
+                            "metodos_http",
+                            {},
+                        )
+                    ),
+                    "indicadores_sensiveis": dict(
+                        inspecao.get(
+                            "indicadores_sensiveis",
+                            {},
+                        )
+                    ),
+                })
+
+    return info
 
 def _porta_da_url(url: str) -> int | None:
     """

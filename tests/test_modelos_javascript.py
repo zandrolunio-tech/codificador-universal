@@ -57,6 +57,18 @@ class TestModelosJavaScript(unittest.TestCase):
             resultado.conteudo,
         )
 
+    def test_online_resultado_possui_javascript_info(self):
+        from online.modelos import OnlineResultado
+
+        resultado = OnlineResultado(
+            alvo="https://exemplo.test/"
+        )
+
+        self.assertEqual(
+            resultado.javascript_info,
+            {},
+        )
+
     def test_online_resultado_possui_javascript(self):
         from online.modelos import OnlineResultado
 

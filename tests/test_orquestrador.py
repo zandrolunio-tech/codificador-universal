@@ -345,6 +345,45 @@ class TestOrquestrador(unittest.TestCase):
             1,
         )
 
+        javascript_info = resultado.javascript_info
+
+        self.assertEqual(
+            javascript_info["total_scripts"],
+            1,
+        )
+        self.assertEqual(
+            javascript_info["scripts_analisados"],
+            1,
+        )
+        self.assertEqual(
+            javascript_info["scripts_inline"],
+            1,
+        )
+        self.assertIn(
+            "/api/login",
+            javascript_info["endpoints"],
+        )
+        self.assertIn(
+            "wss://exemplo.test/socket",
+            javascript_info["websockets"],
+        )
+        self.assertTrue(
+            javascript_info["caracteristicas"].get(
+                "usa_fetch",
+                False,
+            )
+        )
+        self.assertTrue(
+            any(
+                sink.get("tipo") == "innerHTML"
+                for sink in javascript_info["dom_sinks"]
+            )
+        )
+        self.assertEqual(
+            len(javascript_info["inspecoes_profunda"]),
+            1,
+        )
+
         analise = javascript[0]["analises"][0]["analise"]
 
         self.assertTrue(
@@ -395,6 +434,148 @@ class TestOrquestrador(unittest.TestCase):
                 for correlacao in correlacoes
             )
         )
+
+    def test_consolidar_javascript(self):
+        from online.orquestrador import _consolidar_javascript
+
+        javascript = [
+            {
+                "url": "https://exemplo.test/",
+                "scripts": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "module",
+                        "url": "https://exemplo.test/",
+                        "conteudo": "const x = 1;",
+                        "atributos": {},
+                    },
+                    {
+                        "origem": "script_src",
+                        "tipo": "externo",
+                        "url": "https://cdn.exemplo.test/app.js",
+                        "conteudo": "",
+                        "atributos": {
+                            "defer": "defer",
+                        },
+                    },
+                ],
+                "analises": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "module",
+                        "url": "https://exemplo.test/",
+                        "analise": {
+                            "detectado": True,
+                            "funcoes": ["iniciar"],
+                            "imports": ["./modulo.js"],
+                            "exports": ["iniciar"],
+                            "urls": [
+                                "https://exemplo.test/api"
+                            ],
+                            "endpoints": ["/api/login"],
+                            "websockets": [
+                                "wss://exemplo.test/socket"
+                            ],
+                            "apis": {
+                                "fetch": ["fetch"]
+                            },
+                            "frameworks": ["React"],
+                            "caracteristicas": {
+                                "fetch": True,
+                                "modules": True,
+                            },
+                            "fontes_dados": [
+                                "fetch"
+                            ],
+                            "dom_sinks": [
+                                "innerHTML"
+                            ],
+                            "padroes_sensiveis": {
+                                "document_cookie": [
+                                    "document.cookie"
+                                ]
+                            },
+                            "inspecao_profunda": {
+                                "tamanho_bytes": 12,
+                                "urls_http": [
+                                    "https://exemplo.test/api"
+                                ],
+                                "urls_websocket": [
+                                    "wss://exemplo.test/socket"
+                                ],
+                                "metodos_http": {
+                                    "GET": 1
+                                },
+                                "indicadores_sensiveis": {
+                                    "cookie": 1
+                                },
+                            },
+                        },
+                        "strings": [
+                            "https://exemplo.test/api"
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        resultado = _consolidar_javascript(
+            javascript
+        )
+
+        self.assertEqual(
+            resultado["total_scripts"],
+            2,
+        )
+        self.assertEqual(
+            resultado["scripts_analisados"],
+            1,
+        )
+        self.assertEqual(
+            resultado["scripts_inline"],
+            1,
+        )
+        self.assertEqual(
+            resultado["scripts_externos"],
+            1,
+        )
+        self.assertEqual(
+            resultado["modulos"],
+            1,
+        )
+        self.assertIn(
+            "iniciar",
+            resultado["funcoes"],
+        )
+        self.assertIn(
+            "/api/login",
+            resultado["endpoints"],
+        )
+        self.assertIn(
+            "wss://exemplo.test/socket",
+            resultado["websockets"],
+        )
+        self.assertIn(
+            "React",
+            resultado["frameworks"],
+        )
+        self.assertIn(
+            "innerHTML",
+            resultado["dom_sinks"],
+        )
+        self.assertIn(
+            "fetch",
+            resultado["fontes_dados"],
+        )
+        self.assertIn(
+            "document_cookie",
+            resultado["padroes_sensiveis"],
+        )
+        self.assertEqual(
+            len(resultado["inspecoes_profunda"]),
+            1,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
