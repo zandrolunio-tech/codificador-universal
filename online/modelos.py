@@ -206,3 +206,4 @@ class OnlineResultado:
     metadados: dict[str, Any] = field(default_factory=dict)
     http_bruto: dict = field(default_factory=dict)
     headers: dict = field(default_factory=dict)
+    javascript: list[dict[str, Any]] = field(default_factory=list)

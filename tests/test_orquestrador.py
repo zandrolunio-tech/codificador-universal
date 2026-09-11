@@ -316,6 +316,11 @@ class TestOrquestrador(unittest.TestCase):
         javascript = resultado.metadados["javascript"]
 
         self.assertEqual(
+            resultado.javascript,
+            javascript,
+        )
+
+        self.assertEqual(
             len(javascript),
             1,
         )

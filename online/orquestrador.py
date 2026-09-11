@@ -161,6 +161,8 @@ def analisar_online(
             "analises": analises,
         })
 
+    resultado.javascript = javascript_resultados
+
     resultado.metadados["javascript"] = (
         javascript_resultados
     )
