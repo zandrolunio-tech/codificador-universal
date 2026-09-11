@@ -280,6 +280,91 @@ class TestAnalisadorHTML(unittest.TestCase):
             valores,
         )
 
+    def test_inventario_consolidado_de_recursos(self):
+        html = """
+        <html>
+        <head>
+            <link rel="stylesheet" href="/css/app.css">
+            <link rel="manifest" href="/manifest.webmanifest">
+            <link
+                rel="preload"
+                as="font"
+                href="https://cdn.externo.test/font.woff2"
+            >
+        </head>
+        <body>
+            <script src="/js/app.js"></script>
+            <img src="/img/logo.png">
+            <iframe src="https://widget.externo.test/frame"></iframe>
+            <video src="/media/video.mp4"></video>
+            <object data="/docs/manual.pdf"></object>
+        </body>
+        </html>
+        """
+
+        resultado = analisar_html(
+            html,
+            "https://exemplo.test/",
+            "text/html",
+        )
+
+        recursos = resultado.recursos
+
+        self.assertEqual(len(recursos), 8)
+
+        por_tipo = {
+            item["tipo"]: item
+            for item in recursos
+        }
+
+        self.assertEqual(
+            por_tipo["javascript"]["url"],
+            "https://exemplo.test/js/app.js",
+        )
+
+        self.assertEqual(
+            por_tipo["css"]["url"],
+            "https://exemplo.test/css/app.css",
+        )
+
+        self.assertEqual(
+            por_tipo["manifest"]["url"],
+            "https://exemplo.test/manifest.webmanifest",
+        )
+
+        self.assertEqual(
+            por_tipo["fonte"]["origem"],
+            "externa",
+        )
+
+        self.assertEqual(
+            por_tipo["imagem"]["url"],
+            "https://exemplo.test/img/logo.png",
+        )
+
+        self.assertTrue(
+            por_tipo["iframe"]["externo"]
+        )
+
+        self.assertEqual(
+            por_tipo["video"]["origem"],
+            "mesma_origem",
+        )
+
+        self.assertEqual(
+            por_tipo["object"]["url"],
+            "https://exemplo.test/docs/manual.pdf",
+        )
+
+        for recurso in recursos:
+            self.assertIn("elemento", recurso)
+            self.assertIn("referencia", recurso)
+            self.assertIn("url", recurso)
+            self.assertIn("host", recurso)
+            self.assertIn("origem", recurso)
+            self.assertIn("externo", recurso)
+            self.assertIn("atributos", recurso)
+
     def test_links_a_e_fontes_sao_inventariados(self):
         html = """
         <!doctype html>

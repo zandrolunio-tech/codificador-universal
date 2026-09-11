@@ -75,6 +75,64 @@ def _eh_externa(url: str, base_url: str) -> bool:
         return False
 
 
+def _origem_recurso(url: str, base_url: str) -> str:
+    """
+    Classifica a origem observada de um recurso.
+
+    A classificacao e estatica e nao realiza qualquer requisicao.
+    """
+    if not url:
+        return "desconhecida"
+
+    try:
+        alvo = urlparse(url)
+        base = urlparse(base_url)
+
+        if alvo.scheme in {"data", "blob"}:
+            return alvo.scheme
+
+        if not alvo.netloc:
+            return "relativa"
+
+        if not base.netloc:
+            return "externa"
+
+        if alvo.netloc.lower() == base.netloc.lower():
+            return "mesma_origem"
+
+        return "externa"
+
+    except ValueError:
+        return "desconhecida"
+
+
+def _recurso(
+    tipo: str,
+    elemento: str,
+    referencia: str,
+    base_url: str,
+    atributos: dict[str, str] | None = None,
+) -> dict:
+    """
+    Cria uma entrada padronizada no inventario de recursos.
+
+    Nenhum recurso e acessado; somente a referencia presente no HTML
+    e normalizada.
+    """
+    absoluto = _url_absoluta(referencia, base_url)
+
+    return {
+        "tipo": tipo,
+        "elemento": elemento,
+        "referencia": referencia,
+        "url": absoluto,
+        "host": _host(absoluto),
+        "origem": _origem_recurso(absoluto, base_url),
+        "externo": _eh_externa(absoluto, base_url),
+        "atributos": dict(atributos or {}),
+    }
+
+
 def _extrair_charset(content_type: str, html: str) -> str:
     encontrado = re.search(
         r"charset\s*=\s*['\"]?([A-Za-z0-9._:-]+)",
@@ -311,10 +369,28 @@ class _HTMLParser(HTMLParser):
 
             if "stylesheet" in rel:
                 self.resultado.estilos.append(item)
+                self.resultado.recursos.append(
+                    _recurso(
+                        "css",
+                        "link",
+                        referencia,
+                        self.base_url,
+                        atributos,
+                    )
+                )
             elif "icon" in rel or "shortcut icon" in rel:
                 item["tipo"] = "favicon"
             elif "manifest" in rel:
                 item["tipo"] = "manifest"
+                self.resultado.recursos.append(
+                    _recurso(
+                        "manifest",
+                        "link",
+                        referencia,
+                        self.base_url,
+                        atributos,
+                    )
+                )
             elif "canonical" in rel:
                 item["tipo"] = "canonical"
             elif "alternate" in rel:
@@ -337,19 +413,34 @@ class _HTMLParser(HTMLParser):
                 or "font" in rel_tokens
             ):
                 self.resultado.recursos.append(
-                    {
-                        "tipo": "fonte",
-                        "elemento": "link",
-                        "referencia": referencia,
-                        "url": absoluto,
-                        "host": _host(absoluto),
-                        "externo": _eh_externa(
-                            absoluto,
-                            self.base_url,
-                        ),
-                        "atributos": atributos,
-                    }
+                    _recurso(
+                        "fonte",
+                        "link",
+                        referencia,
+                        self.base_url,
+                        atributos,
+                    )
                 )
+
+            if "preload" in rel_tokens:
+                tipo_preload = (
+                    atributos.get("as", "").lower()
+                    or tipo_recurso
+                    or "preload"
+                )
+
+                if tipo_preload == "font":
+                    pass
+                else:
+                    self.resultado.recursos.append(
+                        _recurso(
+                            tipo_preload,
+                            "link",
+                            referencia,
+                            self.base_url,
+                            atributos,
+                        )
+                    )
 
         if tag == "a":
             referencia = atributos.get("href", "")
@@ -392,6 +483,18 @@ class _HTMLParser(HTMLParser):
             }
 
             self.resultado.scripts.append(item)
+
+            if referencia:
+                self.resultado.recursos.append(
+                    _recurso(
+                        "javascript",
+                        "script",
+                        referencia,
+                        self.base_url,
+                        atributos,
+                    )
+                )
+
             self._script_atual = {
                 "item": item,
                 "partes": [],
@@ -417,6 +520,16 @@ class _HTMLParser(HTMLParser):
                 }
             )
 
+            self.resultado.recursos.append(
+                _recurso(
+                    "imagem",
+                    "img",
+                    referencia,
+                    self.base_url,
+                    atributos,
+                )
+            )
+
         if tag == "iframe":
             referencia = atributos.get("src", "")
             absoluto = _url_absoluta(referencia, self.base_url)
@@ -431,24 +544,30 @@ class _HTMLParser(HTMLParser):
                 }
             )
 
+            self.resultado.recursos.append(
+                _recurso(
+                    "iframe",
+                    "iframe",
+                    referencia,
+                    self.base_url,
+                    atributos,
+                )
+            )
+
         if tag in {"video", "audio", "source", "object", "embed"}:
             referencia = (
                 atributos.get("src", "")
                 or atributos.get("data", "")
             )
 
-            absoluto = _url_absoluta(referencia, self.base_url)
-
             self.resultado.recursos.append(
-                {
-                    "tipo": _RECURSOS.get(tag, tag),
-                    "elemento": tag,
-                    "referencia": referencia,
-                    "url": absoluto,
-                    "host": _host(absoluto),
-                    "externo": _eh_externa(absoluto, self.base_url),
-                    "atributos": atributos,
-                }
+                _recurso(
+                    _RECURSOS.get(tag, tag),
+                    tag,
+                    referencia,
+                    self.base_url,
+                    atributos,
+                )
             )
 
         if tag == "form":
