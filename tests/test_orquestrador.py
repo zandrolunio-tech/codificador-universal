@@ -577,5 +577,97 @@ class TestOrquestrador(unittest.TestCase):
         )
 
 
+    def test_consolidar_javascript_integra_requisicoes_http(self):
+        from online.orquestrador import _consolidar_javascript
+
+        javascript_resultados = [
+            {
+                "url": "http://laboratorio.local/",
+                "scripts": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "classic",
+                        "url": "",
+                        "conteudo": "fetch('/api/login')",
+                        "atributos": {},
+                    }
+                ],
+                "analises": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "classic",
+                        "url": "",
+                        "atributos": {},
+                        "conteudo": "fetch('/api/login')",
+                        "analise": {
+                            "detectado": True,
+                            "requisicoes_http": [
+                                {
+                                    "tipo": "fetch",
+                                    "metodo": "POST",
+                                    "url": "/api/login",
+                                    "headers": [
+                                        {
+                                            "nome": "Content-Type",
+                                            "valor": "application/json",
+                                        }
+                                    ],
+                                    "body": "JSON.stringify(dados)",
+                                    "linha": 1,
+                                }
+                            ],
+                        },
+                        "strings": [],
+                    }
+                ],
+            }
+        ]
+
+        resultado = _consolidar_javascript(
+            javascript_resultados
+        )
+
+        self.assertIn(
+            "requisicoes_http",
+            resultado,
+        )
+
+        self.assertEqual(
+            len(resultado["requisicoes_http"]),
+            1,
+        )
+
+        requisicao = resultado["requisicoes_http"][0]
+
+        self.assertEqual(
+            requisicao["tipo"],
+            "fetch",
+        )
+
+        self.assertEqual(
+            requisicao["metodo"],
+            "POST",
+        )
+
+        self.assertEqual(
+            requisicao["url"],
+            "/api/login",
+        )
+
+        self.assertEqual(
+            requisicao["body"],
+            "JSON.stringify(dados)",
+        )
+
+        self.assertEqual(
+            requisicao["url_resposta"],
+            "http://laboratorio.local/",
+        )
+
+        self.assertEqual(
+            requisicao["origem"],
+            "script_inline",
+        )
+
 if __name__ == "__main__":
     unittest.main()

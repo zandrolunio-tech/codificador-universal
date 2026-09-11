@@ -484,6 +484,316 @@ def _analisar_fontes_dados(codigo: str) -> list[dict[str, Any]]:
 
 
 
+
+def _linha_do_codigo(codigo: str, posicao: int) -> int:
+    return codigo.count("\n", 0, posicao) + 1
+
+
+def _sanitizar_valor_http(valor: str) -> str:
+    valor = valor.strip()
+
+    if (
+        len(valor) >= 2
+        and valor[0] == valor[-1]
+        and valor[0] in {"\"", "'", "`"}
+    ):
+        valor = valor[1:-1].strip()
+
+    if not valor:
+        return ""
+
+    padroes_sensiveis = (
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "token",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "bearer",
+        "api-key",
+        "apikey",
+        "secret",
+        "password",
+        "passwd",
+    )
+
+    valor_lower = valor.lower()
+
+    if any(
+        padrao in valor_lower
+        for padrao in padroes_sensiveis
+    ):
+        return "[VALOR_REDACTED]"
+
+    return valor
+
+
+def _extrair_headers_http(bloco: str) -> list[dict]:
+    resultado = []
+
+    padrao_objeto = re.compile(
+        r"""headers\s*:\s*\{([\s\S]{0,4000}?)\}""",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    padrao_pares = re.compile(
+        r"""["'`]([^"'`]+)["'`]\s*:\s*([^,}\n]+)""",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    for objeto in padrao_objeto.finditer(bloco):
+        conteudo_headers = objeto.group(1)
+
+        for correspondencia in padrao_pares.finditer(conteudo_headers):
+            nome = correspondencia.group(1).strip()
+            valor = correspondencia.group(2).strip()
+
+            if not nome:
+                continue
+
+            resultado.append(
+                {
+                    "nome": nome,
+                    "valor": _sanitizar_valor_http(valor),
+                }
+            )
+
+    padrao_xhr = re.compile(
+        r"""\bsetRequestHeader\s*\(\s*["'`]([^"'`]+)["'`]\s*,\s*([^,)]+)""",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    for correspondencia in padrao_xhr.finditer(bloco):
+        nome = correspondencia.group(1).strip()
+        valor = correspondencia.group(2).strip()
+
+        if not nome:
+            continue
+
+        resultado.append(
+            {
+                "nome": nome,
+                "valor": _sanitizar_valor_http(valor),
+            }
+        )
+
+    unicos = []
+    vistos = set()
+
+    for header in resultado:
+        chave = (
+            header["nome"].lower(),
+            header["valor"],
+        )
+
+        if chave in vistos:
+            continue
+
+        vistos.add(chave)
+        unicos.append(header)
+
+    return unicos
+
+
+def _extrair_body_http(bloco: str) -> str:
+    padroes = [
+        r"""\bbody\s*:\s*([^,}\n]+)""",
+        r"""\.send\s*\(([^)]*)\)""",
+    ]
+
+    for padrao in padroes:
+        correspondencia = re.search(
+            padrao,
+            bloco,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        if correspondencia:
+            return _sanitizar_valor_http(
+                correspondencia.group(1)
+            )
+
+    return ""
+
+
+def _analisar_requisicoes_http(codigo: str) -> list[dict]:
+    resultado = []
+
+    # ---------------------------------------------------------
+    # FETCH
+    # ---------------------------------------------------------
+    padrao_fetch = re.compile(
+        r"""\bfetch\s*\(\s*"""
+        r"""["'`]([^"'`]+)["'`]"""
+        r"""([\s\S]{0,1200}?)"""
+        r"""\)""",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    for correspondencia in padrao_fetch.finditer(codigo):
+        url = correspondencia.group(1).strip()
+        bloco = correspondencia.group(0)
+        inicio = correspondencia.start()
+
+        metodo = "GET"
+
+        metodo_match = re.search(
+            r"""\bmethod\s*:\s*["'`]([A-Za-z]+)["'`]""",
+            bloco,
+            flags=re.IGNORECASE,
+        )
+
+        if metodo_match:
+            metodo = metodo_match.group(1).upper()
+
+        resultado.append({
+            "tipo": "fetch",
+            "metodo": metodo,
+            "url": url,
+            "headers": _extrair_headers_http(bloco),
+            "body": _extrair_body_http(bloco),
+            "linha": _linha_do_codigo(codigo, inicio),
+        })
+
+    # ---------------------------------------------------------
+    # XMLHttpRequest
+    # ---------------------------------------------------------
+    variaveis_xhr = {}
+
+    for correspondencia in re.finditer(
+        r"""\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)"""
+        r"""\s*=\s*new\s+XMLHttpRequest\s*\(\s*\)""",
+        codigo,
+        flags=re.IGNORECASE | re.MULTILINE,
+    ):
+        variaveis_xhr[correspondencia.group(1)] = (
+            correspondencia.start()
+        )
+
+    for nome_variavel, inicio_variavel in variaveis_xhr.items():
+        fim_contexto = min(
+            len(codigo),
+            inicio_variavel + 2500,
+        )
+
+        bloco = codigo[
+            inicio_variavel:fim_contexto
+        ]
+
+        open_match = re.search(
+            rf"""\b{re.escape(nome_variavel)}\s*\.\s*open\s*\("""
+            r"""\s*["'`]([A-Za-z]+)["'`]"""
+            r"""\s*,\s*["'`]([^"'`]+)["'`]""",
+            bloco,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        if not open_match:
+            continue
+
+        metodo = open_match.group(1).upper()
+        url = open_match.group(2).strip()
+
+        headers = []
+
+        for header_match in re.finditer(
+            rf"""\b{re.escape(nome_variavel)}\s*\.\s*"""
+            r"""setRequestHeader\s*\("""
+            r"""\s*["'`]([^"'`]+)["'`]"""
+            r"""\s*,\s*([^)]*)\)""",
+            bloco,
+            flags=re.IGNORECASE | re.MULTILINE,
+        ):
+            headers.append({
+                "nome": header_match.group(1).strip(),
+                "valor": _sanitizar_valor_http(
+                    header_match.group(2)
+                ),
+            })
+
+        send_match = re.search(
+            rf"""\b{re.escape(nome_variavel)}\s*\.\s*"""
+            r"""send\s*\(([^)]*)\)""",
+            bloco,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+
+        body = ""
+
+        if send_match:
+            body = _sanitizar_valor_http(
+                send_match.group(1)
+            )
+
+        resultado.append({
+            "tipo": "xmlhttprequest",
+            "metodo": metodo,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "linha": _linha_do_codigo(
+                codigo,
+                inicio_variavel + open_match.start(),
+            ),
+        })
+
+    # ---------------------------------------------------------
+    # AXIOS
+    # ---------------------------------------------------------
+    padrao_axios = re.compile(
+        r"""\baxios\."""
+        r"""(get|post|put|patch|delete|head|options)\s*\("""
+        r"""\s*["'`]([^"'`]+)["'`]"""
+        r"""([\s\S]{0,1200}?)"""
+        r"""\)""",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    for correspondencia in padrao_axios.finditer(codigo):
+        metodo = correspondencia.group(1).upper()
+        url = correspondencia.group(2).strip()
+        bloco = correspondencia.group(0)
+
+        body = ""
+
+        argumentos = bloco.split(
+            ",",
+            2,
+        )
+
+        if len(argumentos) >= 2:
+            segundo = argumentos[1].strip()
+
+            if segundo:
+                body = _sanitizar_valor_http(
+                    segundo
+                )
+
+        resultado.append({
+            "tipo": "axios",
+            "metodo": metodo,
+            "url": url,
+            "headers": _extrair_headers_http(bloco),
+            "body": body,
+            "linha": _linha_do_codigo(
+                codigo,
+                correspondencia.start(),
+            ),
+        })
+
+    resultado.sort(
+        key=lambda item: (
+            item["linha"],
+            item["tipo"],
+            item["metodo"],
+            item["url"],
+        )
+    )
+
+    return resultado
+
 def _analisar_inspecao_profunda(codigo: str) -> dict:
     """
     Executa uma inspeção estática mais ampla do JavaScript.
@@ -636,6 +946,7 @@ def analisar_javascript(codigo: str) -> dict:
             "urls": [],
             "endpoints": [],
             "websockets": [],
+            "requisicoes_http": [],
             "apis": {
                 "fetch": [],
                 "xmlhttprequest": [],
@@ -676,6 +987,7 @@ def analisar_javascript(codigo: str) -> dict:
 
     dom_sinks = _analisar_dom_sinks(codigo)
     fontes_dados = _analisar_fontes_dados(codigo)
+    requisicoes_http = _analisar_requisicoes_http(codigo)
 
     return {
         "dom_sinks": dom_sinks,
@@ -688,6 +1000,7 @@ def analisar_javascript(codigo: str) -> dict:
         "urls": _analisar_urls(codigo),
         "endpoints": _analisar_endpoints(codigo),
         "websockets": _analisar_websockets(codigo),
+        "requisicoes_http": requisicoes_http,
         "apis": _analisar_apis(codigo),
         "frameworks": _detectar_frameworks(codigo),
         "padroes_sensiveis": _analisar_padroes_sensiveis(codigo),

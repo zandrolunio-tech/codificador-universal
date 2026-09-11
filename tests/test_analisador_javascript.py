@@ -525,5 +525,86 @@ class TestAnalisadorJavaScript(unittest.TestCase):
             )
         )
 
+    def test_analisar_javascript_inventaria_requisicoes_http(self):
+        from online.analisador_javascript import analisar_javascript
+
+        codigo = """
+    fetch("/api/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer segredo-lab"
+        },
+        body: JSON.stringify(dados)
+    });
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/clientes");
+    xhr.setRequestHeader("X-Lab-Test", "laboratorio");
+    xhr.send();
+
+    axios.post("/api/pagamentos", dados, {
+        headers: {
+            "Content-Type": "application/json"
+        }
+    });
+    """
+
+        resultado = analisar_javascript(codigo)
+
+        requisicoes = resultado["requisicoes_http"]
+
+        self.assertEqual(len(requisicoes), 3)
+
+        fetch = requisicoes[0]
+
+        self.assertEqual(fetch["tipo"], "fetch")
+        self.assertEqual(fetch["metodo"], "POST")
+        self.assertEqual(fetch["url"], "/api/login")
+        self.assertEqual(fetch["body"], "JSON.stringify(dados)")
+
+        nomes_fetch = {
+            header["nome"]
+            for header in fetch["headers"]
+        }
+
+        self.assertIn("Content-Type", nomes_fetch)
+        self.assertIn("Authorization", nomes_fetch)
+
+        valores_fetch = " ".join(
+            header["valor"]
+            for header in fetch["headers"]
+        )
+
+        self.assertNotIn("segredo-lab", valores_fetch)
+        self.assertIn("[VALOR_REDACTED]", valores_fetch)
+
+        xhr = requisicoes[1]
+
+        self.assertEqual(xhr["tipo"], "xmlhttprequest")
+        self.assertEqual(xhr["metodo"], "GET")
+        self.assertEqual(xhr["url"], "/api/clientes")
+
+        nomes_xhr = {
+            header["nome"]
+            for header in xhr["headers"]
+        }
+
+        self.assertIn("X-Lab-Test", nomes_xhr)
+
+        axios = requisicoes[2]
+
+        self.assertEqual(axios["tipo"], "axios")
+        self.assertEqual(axios["metodo"], "POST")
+        self.assertEqual(axios["url"], "/api/pagamentos")
+        self.assertEqual(axios["body"], "dados")
+
+        nomes_axios = {
+            header["nome"]
+            for header in axios["headers"]
+        }
+
+        self.assertIn("Content-Type", nomes_axios)
+
 if __name__ == "__main__":
     unittest.main()

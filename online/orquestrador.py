@@ -443,6 +443,7 @@ def _consolidar_javascript(
         "urls": [],
         "endpoints": [],
         "websockets": [],
+        "requisicoes_http": [],
         "apis": {},
         "frameworks": [],
         "caracteristicas": {},
@@ -523,6 +524,31 @@ def _consolidar_javascript(
             for valor in entrada.get("strings", []):
                 if valor not in info["strings"]:
                     info["strings"].append(valor)
+
+            requisicoes_http = analise.get(
+                "requisicoes_http",
+                [],
+            )
+
+            for requisicao in requisicoes_http:
+                requisicao_copia = {
+                    "tipo": requisicao.get("tipo", ""),
+                    "metodo": requisicao.get("metodo", ""),
+                    "url": requisicao.get("url", ""),
+                    "headers": list(
+                        requisicao.get("headers", [])
+                    ),
+                    "body": requisicao.get("body", ""),
+                    "linha": requisicao.get("linha", 0),
+                    "url_resposta": url_resposta,
+                    "origem": entrada.get("origem", ""),
+                    "script_url": entrada.get("url", ""),
+                }
+
+                adicionar_unico(
+                    info["requisicoes_http"],
+                    requisicao_copia,
+                )
 
             apis = analise.get("apis", {})
             for nome_api, valores in apis.items():
