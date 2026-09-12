@@ -219,23 +219,76 @@ def _analisar_websockets_info(codigo: str) -> list[dict]:
         ) and "error" not in eventos:
             eventos.append("error")
 
-        envio = bool(
-            re.search(
-                r"""\.send\s*\(""",
+        operacoes_envio = []
+
+        for ocorrencia_envio in re.finditer(
+            r""".send\s*\(""",
+            contexto,
+            re.IGNORECASE,
+        ):
+            posicao_envio = (
+                inicio + ocorrencia_envio.start()
+            )
+
+            operacoes_envio.append(
+                {
+                    "tipo": "send",
+                    "linha": _linha_do_codigo(
+                        codigo,
+                        posicao_envio,
+                    ),
+                }
+            )
+
+        operacoes_recepcao = []
+
+        padroes_recepcao = [
+            r"""\.onmessage\s*=""",
+            r"""\.addEventListener\s*\(\s*["'`]message["'`]""",
+        ]
+
+        for padrao_recepcao in padroes_recepcao:
+            for ocorrencia_recepcao in re.finditer(
+                padrao_recepcao,
                 contexto,
                 re.IGNORECASE,
-            )
+            ):
+                posicao_recepcao = (
+                    inicio + ocorrencia_recepcao.start()
+                )
+
+                operacoes_recepcao.append(
+                    {
+                        "tipo": "message",
+                        "linha": _linha_do_codigo(
+                            codigo,
+                            posicao_recepcao,
+                        ),
+                    }
+                )
+
+        operacoes_envio_unicas = []
+
+        for operacao in operacoes_envio:
+            if operacao not in operacoes_envio_unicas:
+                operacoes_envio_unicas.append(
+                    operacao
+                )
+
+        operacoes_recepcao_unicas = []
+
+        for operacao in operacoes_recepcao:
+            if operacao not in operacoes_recepcao_unicas:
+                operacoes_recepcao_unicas.append(
+                    operacao
+                )
+
+        envio = bool(
+            operacoes_envio_unicas
         )
 
-        recepcao = (
-            "message" in eventos
-            or bool(
-                re.search(
-                    r"""\.onmessage\s*=""",
-                    contexto,
-                    re.IGNORECASE,
-                )
-            )
+        recepcao = bool(
+            operacoes_recepcao_unicas
         )
 
         resultado.append(
@@ -245,6 +298,8 @@ def _analisar_websockets_info(codigo: str) -> list[dict]:
                 "eventos": eventos,
                 "envio": envio,
                 "recepcao": recepcao,
+                "operacoes_envio": operacoes_envio_unicas,
+                "operacoes_recepcao": operacoes_recepcao_unicas,
                 "linha": _linha_do_codigo(
                     codigo,
                     inicio,

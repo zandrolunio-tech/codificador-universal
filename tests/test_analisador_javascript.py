@@ -192,6 +192,82 @@ class TestAnalisadorJavaScript(unittest.TestCase):
         )
 
 
+    def test_inventario_websocket_operacoes(self):
+        codigo = """
+        const socket =
+            new WebSocket("wss://ws.exemplo.test/socket");
+
+        socket.send("ping");
+
+        socket.addEventListener(
+            "message",
+            function(evento) {
+                console.log(evento.data);
+            }
+        );
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        websocket = resultado[
+            "websockets_info"
+        ][0]
+
+        self.assertTrue(
+            websocket["envio"]
+        )
+
+        self.assertTrue(
+            websocket["recepcao"]
+        )
+
+        self.assertEqual(
+            len(
+                websocket[
+                    "operacoes_envio"
+                ]
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            websocket[
+                "operacoes_envio"
+            ][0]["tipo"],
+            "send",
+        )
+
+        self.assertGreater(
+            websocket[
+                "operacoes_envio"
+            ][0]["linha"],
+            0,
+        )
+
+        self.assertEqual(
+            len(
+                websocket[
+                    "operacoes_recepcao"
+                ]
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            websocket[
+                "operacoes_recepcao"
+            ][0]["tipo"],
+            "message",
+        )
+
+        self.assertGreater(
+            websocket[
+                "operacoes_recepcao"
+            ][0]["linha"],
+            0,
+        )
+
+
     def test_detecta_fetch(self):
         codigo = """
         fetch("/api/clientes");
