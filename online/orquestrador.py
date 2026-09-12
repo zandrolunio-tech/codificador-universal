@@ -167,6 +167,18 @@ def analisar_online(
         javascript_resultados
     )
 
+    # ---------------------------------------------------------
+    # 2.5.1. INVENTARIO DE URLS OBSERVADAS
+    # ---------------------------------------------------------
+    resultado.urls = _consolidar_urls(
+        alvo=alvo,
+        respostas=resultado.respostas,
+        analises_respostas=analises_respostas,
+        javascript_info=resultado.javascript_info,
+    )
+
+    resultado.metadados["urls"] = resultado.urls
+
     resultado.metadados["javascript"] = (
         javascript_resultados
     )
@@ -418,6 +430,223 @@ def analisar_online(
 
     return resultado
 
+
+
+def _consolidar_urls(
+    alvo: str,
+    respostas: list,
+    analises_respostas: list[dict],
+    javascript_info: dict,
+) -> list[dict]:
+    """
+    Consolida URLs observadas durante a análise online.
+
+    A função somente organiza URLs já encontradas pelos analisadores.
+    Não realiza novas requisições.
+    """
+    from .urls import normalizar_url
+
+    inventario = {}
+
+    def adicionar(url: str, base_url: str, origem: str) -> None:
+        if not isinstance(url, str):
+            return
+
+        url = url.strip()
+
+        if not url:
+            return
+
+        item = normalizar_url(
+            url,
+            base_url=base_url or alvo,
+            origem=origem,
+        )
+
+        if not item:
+            return
+
+        chave = item["url"]
+
+        if chave in inventario:
+            origens = inventario[chave].setdefault(
+                "origens",
+                [],
+            )
+
+            for valor in item.get("origens", []):
+                if valor not in origens:
+                    origens.append(valor)
+
+            return
+
+        inventario[chave] = item
+
+    for resposta in respostas:
+        url_resposta = getattr(
+            resposta,
+            "url",
+            "",
+        )
+
+        adicionar(
+            url_resposta,
+            alvo,
+            "http",
+        )
+
+    for analise in analises_respostas:
+        html = analise.get(
+            "html",
+            {},
+        )
+
+        http = analise.get(
+            "http",
+            {},
+        )
+
+        base_url = http.get(
+            "url_final",
+            "",
+        )
+
+        if not base_url:
+            base_url = alvo
+
+        for recurso in html.get(
+            "recursos",
+            [],
+        ):
+            if not isinstance(recurso, dict):
+                continue
+
+            adicionar(
+                recurso.get("url", ""),
+                base_url,
+                "html",
+            )
+
+        for link in html.get(
+            "links",
+            [],
+        ):
+            if not isinstance(link, dict):
+                continue
+
+            adicionar(
+                link.get("url", ""),
+                base_url,
+                "html",
+            )
+
+        for formulario in html.get(
+            "formularios",
+            [],
+        ):
+            if not isinstance(formulario, dict):
+                continue
+
+            adicionar(
+                formulario.get("url", ""),
+                base_url,
+                "html",
+            )
+
+        adicionar(
+            http.get("url_final", ""),
+            base_url,
+            "http",
+        )
+
+        adicionar(
+            http.get("location", ""),
+            base_url,
+            "http",
+        )
+
+        for redirecionamento in http.get(
+            "redirecionamentos",
+            [],
+        ):
+            if isinstance(redirecionamento, dict):
+                adicionar(
+                    redirecionamento.get("url", ""),
+                    base_url,
+                    "http",
+                )
+            elif isinstance(redirecionamento, str):
+                adicionar(
+                    redirecionamento,
+                    base_url,
+                    "http",
+                )
+
+    for url in javascript_info.get(
+        "urls",
+        [],
+    ):
+        adicionar(
+            url,
+            alvo,
+            "javascript",
+        )
+
+    for endpoint in javascript_info.get(
+        "endpoints",
+        [],
+    ):
+        adicionar(
+            endpoint,
+            alvo,
+            "javascript",
+        )
+
+    for websocket in javascript_info.get(
+        "websockets",
+        [],
+    ):
+        adicionar(
+            websocket,
+            alvo,
+            "javascript",
+        )
+
+    for requisicao in javascript_info.get(
+        "requisicoes_http",
+        [],
+    ):
+        if not isinstance(requisicao, dict):
+            continue
+
+        adicionar(
+            requisicao.get("url", ""),
+            requisicao.get(
+                "url_resposta",
+                "",
+            ) or alvo,
+            "javascript",
+        )
+
+    for websocket in javascript_info.get(
+        "websockets_info",
+        [],
+    ):
+        if not isinstance(websocket, dict):
+            continue
+
+        adicionar(
+            websocket.get("url", ""),
+            websocket.get(
+                "url_resposta",
+                "",
+            ) or alvo,
+            "javascript",
+        )
+
+    return list(
+        inventario.values()
+    )
 
 
 def _consolidar_javascript(

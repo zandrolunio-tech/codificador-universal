@@ -34,6 +34,308 @@ class TestOrquestrador(unittest.TestCase):
             tempo_resposta_ms=12.5,
         )
 
+    def test_inventario_urls_html_e_javascript(self):
+        from online.modelos import OnlineResultado
+
+        resultado = OnlineResultado(
+            alvo="https://exemplo.test/"
+        )
+
+        resultado.urls = [
+            {
+                "url": "https://exemplo.test/api/login",
+                "esquema": "https",
+                "host": "exemplo.test",
+                "porta": 443,
+                "caminho": "/api/login",
+                "query": "",
+                "fragmento": "",
+                "origens": ["html", "javascript"],
+                "interna": True,
+                "tipo": "http",
+            },
+            {
+                "url": "wss://exemplo.test/socket",
+                "esquema": "wss",
+                "host": "exemplo.test",
+                "porta": 443,
+                "caminho": "/socket",
+                "query": "",
+                "fragmento": "",
+                "origens": ["javascript"],
+                "interna": True,
+                "tipo": "websocket",
+            },
+        ]
+
+        self.assertEqual(len(resultado.urls), 2)
+
+        urls = {
+            item["url"]: item
+            for item in resultado.urls
+        }
+
+        self.assertIn(
+            "https://exemplo.test/api/login",
+            urls,
+        )
+
+        self.assertEqual(
+            urls["https://exemplo.test/api/login"]["origens"],
+            ["html", "javascript"],
+        )
+
+        self.assertEqual(
+            urls["wss://exemplo.test/socket"]["tipo"],
+            "websocket",
+        )
+
+    def test_consolidacao_urls_deduplica_e_agrega_origens(self):
+        from online.orquestrador import _consolidar_urls
+
+        resultado = _consolidar_urls(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[
+                {
+                    "http": {
+                        "url_final": "https://exemplo.test/",
+                        "location": "",
+                        "redirecionamentos": [],
+                    },
+                    "html": {
+                        "recursos": [
+                            {
+                                "url": (
+                                    "https://exemplo.test/api/clientes"
+                                    "?id=10#dados"
+                                ),
+                            }
+                        ],
+                        "links": [],
+                        "formularios": [],
+                    },
+                }
+            ],
+            javascript_info={
+                "urls": [
+                    (
+                        "https://exemplo.test/api/clientes"
+                        "?id=10#dados"
+                    )
+                ],
+                "endpoints": [],
+                "websockets": [],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        urls = {
+            item["url"]: item
+            for item in resultado
+        }
+
+        url = (
+            "https://exemplo.test/api/clientes"
+            "?id=10#dados"
+        )
+
+        self.assertEqual(
+            len([
+                item for item in resultado
+                if item["url"] == url
+            ]),
+            1,
+        )
+
+        self.assertEqual(
+            urls[url]["origens"],
+            ["html", "javascript"],
+        )
+
+        self.assertEqual(
+            urls[url]["query"],
+            "id=10",
+        )
+
+        self.assertEqual(
+            urls[url]["fragmento"],
+            "dados",
+        )
+
+    def test_consolidacao_urls_classifica_websocket_e_externa(self):
+        from online.orquestrador import _consolidar_urls
+
+        resultado = _consolidar_urls(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[
+                {
+                    "http": {
+                        "url_final": "https://exemplo.test/",
+                        "location": "",
+                        "redirecionamentos": [],
+                    },
+                    "html": {
+                        "recursos": [
+                            {
+                                "url": (
+                                    "https://cdn.externo.test/logo.png"
+                                ),
+                            }
+                        ],
+                        "links": [],
+                        "formularios": [],
+                    },
+                }
+            ],
+            javascript_info={
+                "urls": [],
+                "endpoints": [],
+                "websockets": [
+                    "wss://exemplo.test/socket",
+                ],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        urls = {
+            item["url"]: item
+            for item in resultado
+        }
+
+        websocket = urls["wss://exemplo.test/socket"]
+        externa = urls["https://cdn.externo.test/logo.png"]
+
+        self.assertEqual(
+            websocket["tipo"],
+            "websocket",
+        )
+
+        self.assertEqual(
+            websocket["esquema"],
+            "wss",
+        )
+
+        self.assertEqual(
+            websocket["porta"],
+            443,
+        )
+
+        self.assertFalse(
+            websocket["interna"],
+        )
+
+        self.assertFalse(
+            externa["interna"],
+        )
+
+        self.assertEqual(
+            externa["tipo"],
+            "http",
+        )
+
+    @patch("online.orquestrador.construir_inventario")
+    @patch("online.orquestrador.analisar_tls")
+    @patch("online.orquestrador.coletar")
+    def test_inventario_urls_integrado_na_analise_online(
+        self,
+        mock_coletar,
+        mock_tls,
+        mock_inventario,
+    ):
+        resposta = self.criar_resposta()
+
+        resposta.corpo = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <link rel="stylesheet" href="/css/app.css">
+            <script>
+                const api = "/api/clientes";
+                const socket = new WebSocket(
+                    "wss://exemplo.test/socket"
+                );
+            </script>
+        </head>
+        <body>
+            <img src="https://cdn.externo.test/logo.png">
+        </body>
+        </html>
+        """
+
+        mock_coletar.return_value.sucesso = True
+        mock_coletar.return_value.respostas = [resposta]
+        mock_coletar.return_value.cookies = []
+        mock_coletar.return_value.erros = []
+
+        mock_tls.return_value = {
+            "detectado": False,
+            "sucesso": False,
+            "url": "https://exemplo.test/",
+            "erros": [],
+        }
+
+        mock_inventario.return_value = {
+            "alvo": "https://exemplo.test/",
+        }
+
+        resultado = analisar_online(
+            "https://exemplo.test/",
+            timeout=5,
+            analisar_certificado=True,
+        )
+
+        self.assertTrue(
+            isinstance(resultado.urls, list)
+        )
+
+        urls = {
+            item["url"]: item
+            for item in resultado.urls
+        }
+
+        self.assertIn(
+            "https://exemplo.test/css/app.css",
+            urls,
+        )
+
+        self.assertIn(
+            "https://exemplo.test/api/clientes",
+            urls,
+        )
+
+        self.assertIn(
+            "wss://exemplo.test/socket",
+            urls,
+        )
+
+        self.assertIn(
+            "https://cdn.externo.test/logo.png",
+            urls,
+        )
+
+        self.assertTrue(
+            urls[
+                "https://exemplo.test/css/app.css"
+            ]["interna"]
+        )
+
+        self.assertFalse(
+            urls[
+                "https://cdn.externo.test/logo.png"
+            ]["interna"]
+        )
+
+        self.assertEqual(
+            urls[
+                "wss://exemplo.test/socket"
+            ]["tipo"],
+            "websocket",
+        )
+
     @patch("online.orquestrador.construir_inventario")
     @patch("online.orquestrador.analisar_portas")
     @patch("online.orquestrador.analisar_tls")
