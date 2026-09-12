@@ -159,157 +159,255 @@ def _analisar_websockets(codigo: str) -> list[str]:
 
 def _analisar_websockets_info(codigo: str) -> list[dict]:
     padrao = re.compile(
-        r"""\bnew\s+WebSocket\s*\(\s*["'`]([^"'`]+)["'`]""",
-        flags=re.IGNORECASE,
+        r"""
+        (?:
+            \b(?:const|let|var)\s+
+            (?P<variavel>[A-Za-z_$][\w$]*)\s*=\s*
+        )?
+        new\s+WebSocket\s*\(\s*
+        ["'`]([^"'`]+)["'`]
+        """,
+        flags=re.IGNORECASE | re.VERBOSE,
     )
 
     resultado = []
 
     for ocorrencia in padrao.finditer(codigo):
-        url = ocorrencia.group(1)
+        variavel = ocorrencia.group("variavel")
+        url = ocorrencia.group(2)
         inicio = ocorrencia.start()
-        fim = min(
-            len(codigo),
-            inicio + 4000,
-        )
-        contexto = codigo[inicio:fim]
 
-        eventos = []
+        if variavel:
+            referencia = re.escape(variavel)
 
-        padroes_eventos = {
-            "open": r"\.onopen\s*=",
-            "message": r"\.onmessage\s*=",
-            "close": r"\.onclose\s*=",
-            "error": r"\.onerror\s*=",
-        }
+            padroes_eventos = {
+                "open": rf"\b{referencia}\.onopen\s*=",
+                "message": rf"\b{referencia}\.onmessage\s*=",
+                "close": rf"\b{referencia}\.onclose\s*=",
+                "error": rf"\b{referencia}\.onerror\s*=",
+            }
 
-        for evento, padrao_evento in padroes_eventos.items():
-            if re.search(
-                padrao_evento,
-                contexto,
-                re.IGNORECASE,
+            eventos = []
+
+            for evento, padrao_evento in padroes_eventos.items():
+                if re.search(
+                    padrao_evento,
+                    codigo,
+                    re.IGNORECASE,
+                ):
+                    eventos.append(evento)
+
+            padroes_eventos_listener = {
+                "open": rf"""
+                    \b{referencia}\.addEventListener\s*\(
+                    \s*["'`]open["'`]
+                """,
+                "message": rf"""
+                    \b{referencia}\.addEventListener\s*\(
+                    \s*["'`]message["'`]
+                """,
+                "close": rf"""
+                    \b{referencia}\.addEventListener\s*\(
+                    \s*["'`]close["'`]
+                """,
+                "error": rf"""
+                    \b{referencia}\.addEventListener\s*\(
+                    \s*["'`]error["'`]
+                """,
+            }
+
+            for evento, padrao_listener in (
+                padroes_eventos_listener.items()
             ):
-                eventos.append(evento)
+                if re.search(
+                    padrao_listener,
+                    codigo,
+                    re.IGNORECASE | re.VERBOSE,
+                ) and evento not in eventos:
+                    eventos.append(evento)
 
-        if re.search(
-            r"""\.addEventListener\s*\(\s*["'`]open["'`]""",
-            contexto,
-            re.IGNORECASE,
-        ) and "open" not in eventos:
-            eventos.append("open")
+            operacoes_envio = []
 
-        if re.search(
-            r"""\.addEventListener\s*\(\s*["'`]message["'`]""",
-            contexto,
-            re.IGNORECASE,
-        ) and "message" not in eventos:
-            eventos.append("message")
+            padrao_envio = rf"""
+                \b{referencia}\.send\s*\(
+            """
 
-        if re.search(
-            r"""\.addEventListener\s*\(\s*["'`]close["'`]""",
-            contexto,
-            re.IGNORECASE,
-        ) and "close" not in eventos:
-            eventos.append("close")
-
-        if re.search(
-            r"""\.addEventListener\s*\(\s*["'`]error["'`]""",
-            contexto,
-            re.IGNORECASE,
-        ) and "error" not in eventos:
-            eventos.append("error")
-
-        operacoes_envio = []
-
-        for ocorrencia_envio in re.finditer(
-            r""".send\s*\(""",
-            contexto,
-            re.IGNORECASE,
-        ):
-            posicao_envio = (
-                inicio + ocorrencia_envio.start()
-            )
-
-            operacoes_envio.append(
-                {
-                    "tipo": "send",
-                    "linha": _linha_do_codigo(
-                        codigo,
-                        posicao_envio,
-                    ),
-                }
-            )
-
-        operacoes_recepcao = []
-
-        padroes_recepcao = [
-            r"""\.onmessage\s*=""",
-            r"""\.addEventListener\s*\(\s*["'`]message["'`]""",
-        ]
-
-        for padrao_recepcao in padroes_recepcao:
-            for ocorrencia_recepcao in re.finditer(
-                padrao_recepcao,
-                contexto,
-                re.IGNORECASE,
+            for ocorrencia_envio in re.finditer(
+                padrao_envio,
+                codigo,
+                re.IGNORECASE | re.VERBOSE,
             ):
-                posicao_recepcao = (
-                    inicio + ocorrencia_recepcao.start()
-                )
-
-                operacoes_recepcao.append(
+                operacoes_envio.append(
                     {
-                        "tipo": "message",
+                        "tipo": "send",
                         "linha": _linha_do_codigo(
                             codigo,
-                            posicao_recepcao,
+                            ocorrencia_envio.start(),
                         ),
                     }
                 )
 
-        operacoes_envio_unicas = []
+            operacoes_recepcao = []
 
-        for operacao in operacoes_envio:
-            if operacao not in operacoes_envio_unicas:
-                operacoes_envio_unicas.append(
-                    operacao
-                )
+            padroes_recepcao = [
+                rf"""
+                    \b{referencia}\.onmessage\s*=
+                """,
+                rf"""
+                    \b{referencia}\.addEventListener\s*\(
+                    \s*["'`]message["'`]
+                """,
+            ]
 
-        operacoes_recepcao_unicas = []
-
-        for operacao in operacoes_recepcao:
-            if operacao not in operacoes_recepcao_unicas:
-                operacoes_recepcao_unicas.append(
-                    operacao
-                )
-
-        envio = bool(
-            operacoes_envio_unicas
-        )
-
-        recepcao = bool(
-            operacoes_recepcao_unicas
-        )
-
-        resultado.append(
-            {
-                "tipo": "websocket",
-                "url": url,
-                "eventos": eventos,
-                "envio": envio,
-                "recepcao": recepcao,
-                "operacoes_envio": operacoes_envio_unicas,
-                "operacoes_recepcao": operacoes_recepcao_unicas,
-                "linha": _linha_do_codigo(
+            for padrao_recepcao in padroes_recepcao:
+                for ocorrencia_recepcao in re.finditer(
+                    padrao_recepcao,
                     codigo,
-                    inicio,
-                ),
+                    re.IGNORECASE | re.VERBOSE,
+                ):
+                    operacoes_recepcao.append(
+                        {
+                            "tipo": "message",
+                            "linha": _linha_do_codigo(
+                                codigo,
+                                ocorrencia_recepcao.start(),
+                            ),
+                        }
+                    )
+
+            eventos_unicos = []
+
+            for evento in eventos:
+                if evento not in eventos_unicos:
+                    eventos_unicos.append(evento)
+
+            operacoes_envio_unicas = []
+
+            for operacao in operacoes_envio:
+                if operacao not in operacoes_envio_unicas:
+                    operacoes_envio_unicas.append(
+                        operacao
+                    )
+
+            operacoes_recepcao_unicas = []
+
+            for operacao in operacoes_recepcao:
+                if operacao not in operacoes_recepcao_unicas:
+                    operacoes_recepcao_unicas.append(
+                        operacao
+                    )
+
+        else:
+            fim_contexto = min(
+                len(codigo),
+                inicio + 4000,
+            )
+
+            contexto = codigo[
+                inicio:fim_contexto
+            ]
+
+            eventos = []
+
+            padroes_eventos = {
+                "open": r"\.onopen\s*=",
+                "message": r"\.onmessage\s*=",
+                "close": r"\.onclose\s*=",
+                "error": r"\.onerror\s*=",
             }
-        )
+
+            for evento, padrao_evento in padroes_eventos.items():
+                if re.search(
+                    padrao_evento,
+                    contexto,
+                    re.IGNORECASE,
+                ):
+                    eventos.append(evento)
+
+            operacoes_envio = []
+
+            for ocorrencia_envio in re.finditer(
+                r"""\.send\s*\(""",
+                contexto,
+                re.IGNORECASE,
+            ):
+                posicao_envio = (
+                    inicio + ocorrencia_envio.start()
+                )
+
+                operacoes_envio.append(
+                    {
+                        "tipo": "send",
+                        "linha": _linha_do_codigo(
+                            codigo,
+                            posicao_envio,
+                        ),
+                    }
+                )
+
+            operacoes_recepcao = []
+
+            padroes_recepcao = [
+                r"""\.onmessage\s*=""",
+                r"""\.addEventListener\s*\(\s*["'`]message["'`]""",
+            ]
+
+            for padrao_recepcao in padroes_recepcao:
+                for ocorrencia_recepcao in re.finditer(
+                    padrao_recepcao,
+                    contexto,
+                    re.IGNORECASE,
+                ):
+                    posicao_recepcao = (
+                        inicio + ocorrencia_recepcao.start()
+                    )
+
+                    operacoes_recepcao.append(
+                        {
+                            "tipo": "message",
+                            "linha": _linha_do_codigo(
+                                codigo,
+                                posicao_recepcao,
+                            ),
+                        }
+                    )
+
+            operacoes_envio_unicas = []
+
+            for operacao in operacoes_envio:
+                if operacao not in operacoes_envio_unicas:
+                    operacoes_envio_unicas.append(
+                        operacao
+                    )
+
+            operacoes_recepcao_unicas = []
+
+            for operacao in operacoes_recepcao:
+                if operacao not in operacoes_recepcao_unicas:
+                    operacoes_recepcao_unicas.append(
+                        operacao
+                    )
+
+        item = {
+            "tipo": "websocket",
+            "url": url,
+            "eventos": eventos_unicos if variavel else eventos,
+            "envio": bool(operacoes_envio_unicas),
+            "recepcao": bool(operacoes_recepcao_unicas),
+            "operacoes_envio": operacoes_envio_unicas,
+            "operacoes_recepcao": operacoes_recepcao_unicas,
+            "linha": _linha_do_codigo(
+                codigo,
+                inicio,
+            ),
+        }
+
+        if variavel:
+            item["variavel"] = variavel
+
+        resultado.append(item)
 
     return resultado
-
-
 
 def _analisar_apis(codigo: str) -> dict[str, list[str]]:
     fetches = _encontrar_unicos(

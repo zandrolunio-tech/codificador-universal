@@ -268,6 +268,97 @@ class TestAnalisadorJavaScript(unittest.TestCase):
         )
 
 
+    def test_inventario_websocket_isola_operacoes_por_socket(self):
+        codigo = """
+        const socketA =
+            new WebSocket("wss://a.exemplo.test/socket");
+
+        socketA.send("mensagem-a");
+
+        const socketB =
+            new WebSocket("wss://b.exemplo.test/socket");
+
+        socketB.onmessage = function(evento) {
+            console.log(evento.data);
+        };
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        websockets = resultado[
+            "websockets_info"
+        ]
+
+        self.assertEqual(
+            len(websockets),
+            2,
+        )
+
+        websocket_a = websockets[0]
+        websocket_b = websockets[1]
+
+        self.assertEqual(
+            websocket_a["url"],
+            "wss://a.exemplo.test/socket",
+        )
+
+        self.assertEqual(
+            websocket_b["url"],
+            "wss://b.exemplo.test/socket",
+        )
+
+        self.assertTrue(
+            websocket_a["envio"]
+        )
+
+        self.assertFalse(
+            websocket_a["recepcao"]
+        )
+
+        self.assertEqual(
+            len(
+                websocket_a[
+                    "operacoes_envio"
+                ]
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            len(
+                websocket_a[
+                    "operacoes_recepcao"
+                ]
+            ),
+            0,
+        )
+
+        self.assertFalse(
+            websocket_b["envio"]
+        )
+
+        self.assertTrue(
+            websocket_b["recepcao"]
+        )
+
+        self.assertEqual(
+            len(
+                websocket_b[
+                    "operacoes_envio"
+                ]
+            ),
+            0,
+        )
+
+        self.assertEqual(
+            len(
+                websocket_b[
+                    "operacoes_recepcao"
+                ]
+            ),
+            1,
+        )
+
     def test_detecta_fetch(self):
         codigo = """
         fetch("/api/clientes");
