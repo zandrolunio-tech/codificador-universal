@@ -179,6 +179,18 @@ def analisar_online(
 
     resultado.metadados["urls"] = resultado.urls
 
+    # ---------------------------------------------------------
+    # 2.5.2. INVENTÁRIO DE ROTAS OBSERVADAS
+    # ---------------------------------------------------------
+    resultado.rotas = _consolidar_rotas(
+        alvo=alvo,
+        respostas=resultado.respostas,
+        analises_respostas=analises_respostas,
+        javascript_info=resultado.javascript_info,
+    )
+
+    resultado.metadados["rotas"] = resultado.rotas
+
     resultado.metadados["javascript"] = (
         javascript_resultados
     )
@@ -628,6 +640,242 @@ def _consolidar_urls(
             "javascript",
         )
 
+    for websocket in javascript_info.get(
+        "websockets_info",
+        [],
+    ):
+        if not isinstance(websocket, dict):
+            continue
+
+        adicionar(
+            websocket.get("url", ""),
+            websocket.get(
+                "url_resposta",
+                "",
+            ) or alvo,
+            "javascript",
+        )
+
+    return list(
+        inventario.values()
+    )
+
+
+
+def _consolidar_rotas(
+    alvo: str,
+    respostas: list,
+    analises_respostas: list[dict],
+    javascript_info: dict,
+) -> list[dict]:
+    """
+    Consolida rotas observadas durante a análise online.
+
+    A função somente organiza informações já encontradas
+    pelos analisadores. Não realiza novas requisições.
+    """
+    from .rotas import normalizar_rota
+
+    inventario = {}
+
+    def adicionar(
+        url: str,
+        base_url: str,
+        origem: str,
+        metodo: str = "",
+    ) -> None:
+        if not isinstance(url, str):
+            return
+
+        url = url.strip()
+
+        if not url:
+            return
+
+        item = normalizar_rota(
+            url,
+            base_url=base_url or alvo,
+            origem=origem,
+            metodo=metodo,
+        )
+
+        if not item:
+            return
+
+        chave = (
+            item.get("url_base", ""),
+            item.get("rota", ""),
+            item.get("tipo", ""),
+            item.get("metodo", ""),
+        )
+
+        if chave in inventario:
+            existente = inventario[chave]
+
+            origens = existente.setdefault(
+                "origens",
+                [],
+            )
+
+            for valor in item.get(
+                "origens",
+                [],
+            ):
+                if valor not in origens:
+                    origens.append(valor)
+
+            parametros = existente.setdefault(
+                "parametros",
+                [],
+            )
+
+            for valor in item.get(
+                "parametros",
+                [],
+            ):
+                if valor not in parametros:
+                    parametros.append(valor)
+
+            return
+
+        inventario[chave] = item
+
+    # ---------------------------------------------------------
+    # 2. HTML
+    # ---------------------------------------------------------
+    for analise in analises_respostas:
+        if not isinstance(analise, dict):
+            continue
+
+        html = analise.get(
+            "html",
+            {},
+        )
+
+        if not isinstance(html, dict):
+            html = {}
+
+        http = analise.get(
+            "http",
+            {},
+        )
+
+        if not isinstance(http, dict):
+            http = {}
+
+        base_url = http.get(
+            "url_final",
+            "",
+        )
+
+        if not base_url:
+            base_url = alvo
+
+        for recurso in html.get(
+            "recursos",
+            [],
+        ):
+            if not isinstance(recurso, dict):
+                continue
+
+            adicionar(
+                recurso.get("url", ""),
+                base_url,
+                "html",
+            )
+
+        for link in html.get(
+            "links",
+            [],
+        ):
+            if not isinstance(link, dict):
+                continue
+
+            adicionar(
+                link.get("url", ""),
+                base_url,
+                "html",
+            )
+
+        for formulario in html.get(
+            "formularios",
+            [],
+        ):
+            if not isinstance(formulario, dict):
+                continue
+
+            adicionar(
+                formulario.get("url", ""),
+                base_url,
+                "html",
+                formulario.get(
+                    "metodo",
+                    formulario.get(
+                        "method",
+                        "",
+                    ),
+                ),
+            )
+
+    # ---------------------------------------------------------
+    # 3. JAVASCRIPT — URLS, ENDPOINTS E WEBSOCKETS
+    # ---------------------------------------------------------
+    for url in javascript_info.get(
+        "urls",
+        [],
+    ):
+        adicionar(
+            url,
+            alvo,
+            "javascript",
+        )
+
+    for endpoint in javascript_info.get(
+        "endpoints",
+        [],
+    ):
+        adicionar(
+            endpoint,
+            alvo,
+            "javascript",
+        )
+
+    for websocket in javascript_info.get(
+        "websockets",
+        [],
+    ):
+        adicionar(
+            websocket,
+            alvo,
+            "javascript",
+        )
+
+    # ---------------------------------------------------------
+    # 4. JAVASCRIPT — FETCH/XHR
+    # ---------------------------------------------------------
+    for requisicao in javascript_info.get(
+        "requisicoes_http",
+        [],
+    ):
+        if not isinstance(requisicao, dict):
+            continue
+
+        adicionar(
+            requisicao.get("url", ""),
+            requisicao.get(
+                "url_resposta",
+                "",
+            ) or alvo,
+            "javascript",
+            requisicao.get(
+                "metodo",
+                "",
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 5. JAVASCRIPT — WEBSOCKET ESTRUTURADO
+    # ---------------------------------------------------------
     for websocket in javascript_info.get(
         "websockets_info",
         [],

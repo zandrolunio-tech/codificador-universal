@@ -4,6 +4,7 @@ from unittest.mock import patch
 from online.modelos import (
     HTTPHeader,
     HTTPResposta,
+    OnlineResultado,
     ServicoObservado,
     ServidorObservado,
 )
@@ -235,6 +236,301 @@ class TestOrquestrador(unittest.TestCase):
         self.assertEqual(
             externa["tipo"],
             "http",
+        )
+
+    def test_consolidacao_rotas_deduplica_parametros_e_agrega_origens(self):
+        from online.orquestrador import _consolidar_rotas
+
+        resultado = _consolidar_rotas(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[
+                {
+                    "http": {
+                        "url_final": "https://exemplo.test/",
+                    },
+                    "html": {
+                        "recursos": [],
+                        "links": [
+                            {
+                                "url": (
+                                    "/api/clientes?id=10"
+                                ),
+                            },
+                            {
+                                "url": (
+                                    "/api/clientes?id=20"
+                                ),
+                            },
+                        ],
+                        "formularios": [],
+                    },
+                }
+            ],
+            javascript_info={
+                "urls": [],
+                "endpoints": [
+                    "/api/clientes?ativo=true",
+                ],
+                "websockets": [],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        self.assertEqual(
+            len(resultado),
+            1,
+        )
+
+        rota = resultado[0]
+
+        self.assertEqual(
+            rota["rota"],
+            "/api/clientes",
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://exemplo.test",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id", "ativo"],
+        )
+
+        self.assertIn(
+            "html",
+            rota["origens"],
+        )
+
+        self.assertIn(
+            "javascript",
+            rota["origens"],
+        )
+
+    def test_consolidacao_rotas_separa_metodos_http(self):
+        from online.orquestrador import _consolidar_rotas
+
+        resultado = _consolidar_rotas(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[],
+            javascript_info={
+                "urls": [],
+                "endpoints": [],
+                "websockets": [],
+                "requisicoes_http": [
+                    {
+                        "tipo": "fetch",
+                        "metodo": "GET",
+                        "url": "/api/clientes",
+                        "url_resposta": "https://exemplo.test/",
+                    },
+                    {
+                        "tipo": "fetch",
+                        "metodo": "POST",
+                        "url": "/api/clientes",
+                        "url_resposta": "https://exemplo.test/",
+                    },
+                ],
+                "websockets_info": [],
+            },
+        )
+
+        self.assertEqual(
+            len(resultado),
+            2,
+        )
+
+        metodos = {
+            item["metodo"]
+            for item in resultado
+        }
+
+        self.assertEqual(
+            metodos,
+            {"GET", "POST"},
+        )
+
+    def test_consolidacao_rotas_preserva_websocket(self):
+        from online.orquestrador import _consolidar_rotas
+
+        resultado = _consolidar_rotas(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[],
+            javascript_info={
+                "urls": [],
+                "endpoints": [],
+                "websockets": [
+                    "wss://exemplo.test/socket?canal=chat",
+                ],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        self.assertEqual(
+            len(resultado),
+            1,
+        )
+
+        rota = resultado[0]
+
+        self.assertEqual(
+            rota["rota"],
+            "/socket",
+        )
+
+        self.assertEqual(
+            rota["tipo"],
+            "websocket",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["canal"],
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "",
+        )
+
+    def test_consolidacao_rotas_rejeita_fontes_invalidas(self):
+        from online.orquestrador import _consolidar_rotas
+
+        resultado = _consolidar_rotas(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[
+                {
+                    "http": {
+                        "url_final": "https://exemplo.test/",
+                    },
+                    "html": {
+                        "recursos": [
+                            {
+                                "url": "mailto:teste@exemplo.test",
+                            },
+                        ],
+                        "links": [],
+                        "formularios": [],
+                    },
+                }
+            ],
+            javascript_info={
+                "urls": [
+                    "mailto:outro@exemplo.test",
+                ],
+                "endpoints": [],
+                "websockets": [],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        self.assertEqual(
+            resultado,
+            [],
+        )
+
+    def test_consolidacao_rotas_nao_realiza_requisicoes(self):
+        from online.orquestrador import _consolidar_rotas
+
+        resultado = _consolidar_rotas(
+            alvo="https://exemplo.test/",
+            respostas=[],
+            analises_respostas=[],
+            javascript_info={
+                "urls": [
+                    "/api/clientes",
+                ],
+                "endpoints": [
+                    "/api/login",
+                ],
+                "websockets": [],
+                "requisicoes_http": [],
+                "websockets_info": [],
+            },
+        )
+
+        self.assertEqual(
+            len(resultado),
+            2,
+        )
+
+    def test_inventario_rotas_integrado_na_analise_online(self):
+        from unittest.mock import patch
+
+        with patch("online.orquestrador.coletar") as mock_coletar,              patch("online.orquestrador.analisar_tls") as mock_tls,              patch("online.orquestrador.construir_inventario") as mock_inventario:
+
+            coleta = OnlineResultado(
+                alvo="https://exemplo.test/",
+                sucesso=True,
+            )
+
+            coleta.respostas = [
+                HTTPResposta(
+                    url="https://exemplo.test/",
+                    status_code=200,
+                    reason="OK",
+                    http_version="HTTP/1.1",
+                    headers=[],
+                    content_type="text/html",
+                    tamanho=100,
+                    corpo=(
+                        "<a href='/api/clientes?id=10'>"
+                        "Clientes"
+                        "</a>"
+                    ),
+                    tempo_resposta_ms=10,
+                    redirecionamentos=[],
+                )
+            ]
+
+            mock_coletar.return_value = coleta
+
+            mock_tls.return_value = {}
+            mock_inventario.return_value = []
+
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(
+            len(resultado.rotas),
+            1,
+        )
+
+        rota = resultado.rotas[0]
+
+        self.assertEqual(
+            rota["rota"],
+            "/api/clientes",
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://exemplo.test",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id"],
+        )
+
+        self.assertIn(
+            "html",
+            rota["origens"],
+        )
+
+        self.assertEqual(
+            resultado.metadados["rotas"],
+            resultado.rotas,
         )
 
     @patch("online.orquestrador.construir_inventario")

@@ -168,6 +168,300 @@ class TestModelosJavaScript(unittest.TestCase):
         )
 
 
+    def test_normaliza_rota_parametros_repetidos(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "/api/clientes?id=10&id=20&ativo=true",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id", "ativo"],
+        )
+
+    def test_normaliza_rota_parametro_sem_valor(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "/api/clientes?ativo",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["ativo"],
+        )
+
+    def test_normaliza_rota_sem_caminho(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "https://exemplo.test",
+            base_url="https://exemplo.test/",
+            origem="http",
+        )
+
+        self.assertEqual(
+            rota["rota"],
+            "/",
+        )
+
+    def test_normaliza_rota_normaliza_metodo(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "/api/clientes",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+            metodo="  post  ",
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "POST",
+        )
+
+    def test_normaliza_rota_fragmento_nao_e_parametro(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "/api/clientes?id=10#detalhes",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id"],
+        )
+
+    def test_normaliza_rota_rejeita_esquema_nao_rede(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "mailto:teste@exemplo.test",
+            base_url="https://exemplo.test/",
+            origem="html",
+        )
+
+        self.assertEqual(
+            rota,
+            {},
+        )
+
+    def test_normaliza_rota_preserva_porta(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "https://api.exemplo.test:8443/clientes",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://api.exemplo.test:8443",
+        )
+
+    def test_normaliza_rota_observada(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "https://exemplo.test/api/clientes?id=10",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+            metodo="GET",
+        )
+
+        self.assertEqual(
+            rota["rota"],
+            "/api/clientes",
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "GET",
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://exemplo.test",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id"],
+        )
+
+        self.assertEqual(
+            rota["tipo"],
+            "http",
+        )
+
+        self.assertTrue(
+            rota["interna"],
+        )
+
+        self.assertEqual(
+            rota["origens"],
+            ["javascript"],
+        )
+
+    def test_normaliza_rota_relativa(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "/api/clientes?id=10&ativo=true",
+            base_url="https://exemplo.test/app/",
+            origem="html",
+        )
+
+        self.assertEqual(
+            rota["rota"],
+            "/api/clientes",
+        )
+
+        self.assertEqual(
+            rota["parametros"],
+            ["id", "ativo"],
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://exemplo.test",
+        )
+
+        self.assertTrue(
+            rota["interna"],
+        )
+
+    def test_normaliza_rota_websocket(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "wss://exemplo.test/socket",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota["rota"],
+            "/socket",
+        )
+
+        self.assertEqual(
+            rota["tipo"],
+            "websocket",
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "",
+        )
+
+    def test_normaliza_rota_externa(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "https://api.externo.test/v1/clientes",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+            metodo="POST",
+        )
+
+        self.assertEqual(
+            rota["rota"],
+            "/v1/clientes",
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "POST",
+        )
+
+        self.assertFalse(
+            rota["interna"],
+        )
+
+        self.assertEqual(
+            rota["url_base"],
+            "https://api.externo.test",
+        )
+
+    def test_normaliza_rota_invalida(self):
+        from online.rotas import normalizar_rota
+
+        rota = normalizar_rota(
+            "",
+            base_url="https://exemplo.test/",
+            origem="javascript",
+        )
+
+        self.assertEqual(
+            rota,
+            {},
+        )
+
+    def test_online_resultado_possui_rotas(self):
+        from online.modelos import OnlineResultado
+
+        resultado = OnlineResultado(
+            alvo="https://exemplo.test/"
+        )
+
+        self.assertIsInstance(
+            resultado.rotas,
+            list,
+        )
+
+        resultado.rotas.append(
+            {
+                "rota": "/api/clientes",
+                "metodo": "GET",
+                "origens": ["javascript"],
+                "url_base": "https://exemplo.test",
+                "parametros": ["id"],
+                "tipo": "http",
+                "interna": True,
+                "confianca": "alta",
+            }
+        )
+
+        self.assertEqual(
+            len(resultado.rotas),
+            1,
+        )
+
+        rota = resultado.rotas[0]
+
+        self.assertEqual(
+            rota["rota"],
+            "/api/clientes",
+        )
+
+        self.assertEqual(
+            rota["metodo"],
+            "GET",
+        )
+
+        self.assertEqual(
+            rota["tipo"],
+            "http",
+        )
+
+        self.assertTrue(
+            rota["interna"],
+        )
+
+        self.assertEqual(
+            rota["confianca"],
+            "alta",
+        )
+
     def test_online_resultado_possui_urls(self):
         from online.modelos import OnlineResultado
 
