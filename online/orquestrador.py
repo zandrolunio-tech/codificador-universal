@@ -443,6 +443,7 @@ def _consolidar_javascript(
         "urls": [],
         "endpoints": [],
         "websockets": [],
+        "websockets_info": [],
         "requisicoes_http": [],
         "apis": {},
         "frameworks": [],
@@ -520,6 +521,30 @@ def _consolidar_javascript(
                         info[campo],
                         valor,
                     )
+
+            for websocket in analise.get("websockets_info", []):
+                if not isinstance(websocket, dict):
+                    continue
+
+                websocket_copia = dict(websocket)
+
+                websocket_copia.setdefault(
+                    "url_resposta",
+                    url_resposta,
+                )
+                websocket_copia.setdefault(
+                    "origem",
+                    entrada.get("origem", ""),
+                )
+                websocket_copia.setdefault(
+                    "script_url",
+                    entrada.get("url", ""),
+                )
+
+                adicionar_unico(
+                    info["websockets_info"],
+                    websocket_copia,
+                )
 
             for valor in entrada.get("strings", []):
                 if valor not in info["strings"]:

@@ -7,7 +7,7 @@ from online.modelos import (
     ServicoObservado,
     ServidorObservado,
 )
-from online.orquestrador import analisar_online
+from online.orquestrador import analisar_online, _consolidar_javascript
 
 
 class TestOrquestrador(unittest.TestCase):
@@ -576,6 +576,107 @@ class TestOrquestrador(unittest.TestCase):
             1,
         )
 
+
+    def test_consolidar_javascript_integra_websocket_info(self):
+        javascript_resultados = [
+            {
+                "url": "https://exemplo.test/",
+                "scripts": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "classic",
+                        "url": "",
+                        "conteudo": "new WebSocket('wss://exemplo.test/socket')",
+                        "atributos": {},
+                    }
+                ],
+                "analises": [
+                    {
+                        "origem": "script_inline",
+                        "tipo": "classic",
+                        "url": "",
+                        "atributos": {},
+                        "conteudo": "new WebSocket('wss://exemplo.test/socket')",
+                        "analise": {
+                            "detectado": True,
+                            "websockets": [
+                                "wss://exemplo.test/socket"
+                            ],
+                            "websockets_info": [
+                                {
+                                    "tipo": "websocket",
+                                    "url": "wss://exemplo.test/socket",
+                                    "eventos": [
+                                        "open",
+                                        "message",
+                                        "close",
+                                        "error",
+                                    ],
+                                    "envio": True,
+                                    "recepcao": True,
+                                    "linha": 1,
+                                }
+                            ],
+                        },
+                        "strings": [],
+                    }
+                ],
+            }
+        ]
+
+        resultado = _consolidar_javascript(
+            javascript_resultados
+        )
+
+        self.assertIn(
+            "websockets_info",
+            resultado,
+        )
+
+        self.assertEqual(
+            len(resultado["websockets_info"]),
+            1,
+        )
+
+        websocket = resultado["websockets_info"][0]
+
+        self.assertEqual(
+            websocket["tipo"],
+            "websocket",
+        )
+
+        self.assertEqual(
+            websocket["url"],
+            "wss://exemplo.test/socket",
+        )
+
+        self.assertIn(
+            "open",
+            websocket["eventos"],
+        )
+
+        self.assertIn(
+            "message",
+            websocket["eventos"],
+        )
+
+        self.assertTrue(
+            websocket["envio"],
+        )
+
+        self.assertTrue(
+            websocket["recepcao"],
+        )
+
+        self.assertEqual(
+            websocket["url_resposta"],
+            "https://exemplo.test/",
+        )
+
+        self.assertEqual(
+            websocket["origem"],
+            "script_inline",
+        )
 
     def test_consolidar_javascript_integra_requisicoes_http(self):
         from online.orquestrador import _consolidar_javascript
