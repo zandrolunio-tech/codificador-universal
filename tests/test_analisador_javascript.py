@@ -113,6 +113,85 @@ class TestAnalisadorJavaScript(unittest.TestCase):
             resultado["websockets"],
         )
 
+    def test_inventario_websocket_estruturado(self):
+        codigo = """
+        const socket = new WebSocket("wss://ws.exemplo.test/socket");
+
+        socket.onopen = function() {
+            socket.send("ping");
+        };
+
+        socket.onmessage = function(evento) {
+            console.log(evento.data);
+        };
+
+        socket.onclose = function() {};
+        socket.onerror = function() {};
+        """
+
+        resultado = analisar_javascript(codigo)
+
+        self.assertIn(
+            "websockets",
+            resultado,
+        )
+
+        self.assertIn(
+            "websockets_info",
+            resultado,
+        )
+
+        self.assertEqual(
+            len(resultado["websockets_info"]),
+            1,
+        )
+
+        websocket = resultado["websockets_info"][0]
+
+        self.assertEqual(
+            websocket["tipo"],
+            "websocket",
+        )
+
+        self.assertEqual(
+            websocket["url"],
+            "wss://ws.exemplo.test/socket",
+        )
+
+        self.assertIn(
+            "open",
+            websocket["eventos"],
+        )
+
+        self.assertIn(
+            "message",
+            websocket["eventos"],
+        )
+
+        self.assertIn(
+            "close",
+            websocket["eventos"],
+        )
+
+        self.assertIn(
+            "error",
+            websocket["eventos"],
+        )
+
+        self.assertTrue(
+            websocket["envio"],
+        )
+
+        self.assertTrue(
+            websocket["recepcao"],
+        )
+
+        self.assertGreater(
+            websocket["linha"],
+            0,
+        )
+
+
     def test_detecta_fetch(self):
         codigo = """
         fetch("/api/clientes");

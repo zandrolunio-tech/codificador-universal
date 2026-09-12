@@ -156,6 +156,106 @@ def _analisar_websockets(codigo: str) -> list[str]:
     )
 
 
+
+def _analisar_websockets_info(codigo: str) -> list[dict]:
+    padrao = re.compile(
+        r"""\bnew\s+WebSocket\s*\(\s*["'`]([^"'`]+)["'`]""",
+        flags=re.IGNORECASE,
+    )
+
+    resultado = []
+
+    for ocorrencia in padrao.finditer(codigo):
+        url = ocorrencia.group(1)
+        inicio = ocorrencia.start()
+        fim = min(
+            len(codigo),
+            inicio + 4000,
+        )
+        contexto = codigo[inicio:fim]
+
+        eventos = []
+
+        padroes_eventos = {
+            "open": r"\.onopen\s*=",
+            "message": r"\.onmessage\s*=",
+            "close": r"\.onclose\s*=",
+            "error": r"\.onerror\s*=",
+        }
+
+        for evento, padrao_evento in padroes_eventos.items():
+            if re.search(
+                padrao_evento,
+                contexto,
+                re.IGNORECASE,
+            ):
+                eventos.append(evento)
+
+        if re.search(
+            r"""\.addEventListener\s*\(\s*["'`]open["'`]""",
+            contexto,
+            re.IGNORECASE,
+        ) and "open" not in eventos:
+            eventos.append("open")
+
+        if re.search(
+            r"""\.addEventListener\s*\(\s*["'`]message["'`]""",
+            contexto,
+            re.IGNORECASE,
+        ) and "message" not in eventos:
+            eventos.append("message")
+
+        if re.search(
+            r"""\.addEventListener\s*\(\s*["'`]close["'`]""",
+            contexto,
+            re.IGNORECASE,
+        ) and "close" not in eventos:
+            eventos.append("close")
+
+        if re.search(
+            r"""\.addEventListener\s*\(\s*["'`]error["'`]""",
+            contexto,
+            re.IGNORECASE,
+        ) and "error" not in eventos:
+            eventos.append("error")
+
+        envio = bool(
+            re.search(
+                r"""\.send\s*\(""",
+                contexto,
+                re.IGNORECASE,
+            )
+        )
+
+        recepcao = (
+            "message" in eventos
+            or bool(
+                re.search(
+                    r"""\.onmessage\s*=""",
+                    contexto,
+                    re.IGNORECASE,
+                )
+            )
+        )
+
+        resultado.append(
+            {
+                "tipo": "websocket",
+                "url": url,
+                "eventos": eventos,
+                "envio": envio,
+                "recepcao": recepcao,
+                "linha": _linha_do_codigo(
+                    codigo,
+                    inicio,
+                ),
+            }
+        )
+
+    return resultado
+
+
+
 def _analisar_apis(codigo: str) -> dict[str, list[str]]:
     fetches = _encontrar_unicos(
         r"\bfetch\s*\(\s*[\"'`]([^\"'`]+)",
@@ -946,6 +1046,7 @@ def analisar_javascript(codigo: str) -> dict:
             "urls": [],
             "endpoints": [],
             "websockets": [],
+            "websockets_info": [],
             "requisicoes_http": [],
             "apis": {
                 "fetch": [],
@@ -1000,6 +1101,7 @@ def analisar_javascript(codigo: str) -> dict:
         "urls": _analisar_urls(codigo),
         "endpoints": _analisar_endpoints(codigo),
         "websockets": _analisar_websockets(codigo),
+        "websockets_info": _analisar_websockets_info(codigo),
         "requisicoes_http": requisicoes_http,
         "apis": _analisar_apis(codigo),
         "frameworks": _detectar_frameworks(codigo),
