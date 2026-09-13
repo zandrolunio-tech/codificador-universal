@@ -131,6 +131,23 @@ _PADRAO_PROPRIEDADE_INDEXADA = re.compile(
 )
 
 
+
+_PADRAO_VARIAVEL_AMBIENTE = re.compile(
+    r"""
+    (?:
+        process\.env
+        |
+        import\.meta\.env
+    )
+    \s*
+    \.
+    \s*
+    (?P<nome>[A-Za-z_][A-Za-z0-9_]*)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
 _PADRAO_ATRIBUICAO = re.compile(
     rf"""
     (?P<prefixo>\$)?
@@ -738,6 +755,46 @@ def _criar_configuracao(
     )
 
 
+
+def _criar_variavel_ambiente(
+    *,
+    codigo: str,
+    correspondencia: re.Match[str],
+    origem: str,
+    arquivo: str | None,
+    caminho: str | None,
+    tipo_deteccao: str,
+) -> dict[str, Any]:
+    nome = correspondencia.group("nome").strip()
+
+    evidencias = [
+        f"variável de ambiente referenciada: {nome}",
+        "valor da variável não foi observado no conteúdo analisado",
+        f"forma de detecção: {tipo_deteccao}",
+    ]
+
+    return normalizar_configuracao(
+        nome=nome,
+        valor=None,
+        origem=origem,
+        fonte=arquivo or "",
+        localizacao=_localizacao(
+            codigo,
+            correspondencia.start("nome"),
+            arquivo=arquivo,
+        ),
+        caminho=caminho or "",
+        contexto="referência a variável de ambiente observada em código",
+        tipo="variavel_ambiente",
+        sensivel=False,
+        classificacao="possivel",
+        pontuacao=70,
+        confianca="media",
+        evidencias=evidencias,
+    )
+
+
+
 def detectar_configuracoes(
     codigo: str,
     *,
@@ -810,6 +867,17 @@ def detectar_configuracoes(
             )
         )
 
+    for correspondencia in _PADRAO_VARIAVEL_AMBIENTE.finditer(
+        codigo_analisavel
+    ):
+        ocorrencias.append(
+            (
+                correspondencia.start(),
+                "variavel_ambiente",
+                correspondencia,
+            )
+        )
+
     ocorrencias.sort(key=lambda item: item[0])
 
     resultado: list[dict[str, Any]] = []
@@ -829,15 +897,27 @@ def detectar_configuracoes(
 
         encontrados.add(chave)
 
-        resultado.append(
-            _criar_configuracao(
-                codigo=codigo,
-                correspondencia=correspondencia,
-                origem=origem,
-                arquivo=arquivo,
-                caminho=caminho,
-                tipo_deteccao=tipo_deteccao,
+        if tipo_deteccao == "variavel_ambiente":
+            resultado.append(
+                _criar_variavel_ambiente(
+                    codigo=codigo,
+                    correspondencia=correspondencia,
+                    origem=origem,
+                    arquivo=arquivo,
+                    caminho=caminho,
+                    tipo_deteccao=tipo_deteccao,
+                )
             )
-        )
+        else:
+            resultado.append(
+                _criar_configuracao(
+                    codigo=codigo,
+                    correspondencia=correspondencia,
+                    origem=origem,
+                    arquivo=arquivo,
+                    caminho=caminho,
+                    tipo_deteccao=tipo_deteccao,
+                )
+            )
 
     return resultado
