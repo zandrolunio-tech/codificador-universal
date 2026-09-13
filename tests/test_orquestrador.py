@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from online.modelos import (
@@ -696,6 +697,83 @@ class TestOrquestrador(unittest.TestCase):
             "text/html",
         )
 
+
+    def test_configuracoes_sao_integradas_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=100,
+            corpo="""
+            <html>
+              <script>
+                const config = {};
+                config["api_key"] = "super-segredo";
+                config["api_url"] = "https://api.exemplo.test";
+              </script>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ), patch(
+            "online.orquestrador.analisar_tls",
+            return_value={},
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(len(resultado.configuracoes), 2)
+
+        nomes = {
+            item["nome"]
+            for item in resultado.configuracoes
+        }
+
+        self.assertIn("api_key", nomes)
+        self.assertIn("api_url", nomes)
+
+        self.assertEqual(
+            resultado.metadados["configuracoes"],
+            resultado.configuracoes,
+        )
+
+        api_key = next(
+            item
+            for item in resultado.configuracoes
+            if item["nome"] == "api_key"
+        )
+
+        self.assertEqual(
+            api_key["valor"],
+            "[REDACTED]",
+        )
+
+        self.assertNotIn(
+            "super-segredo",
+            str(resultado.configuracoes),
+        )
 
     @patch("online.orquestrador.construir_inventario")
     @patch("online.orquestrador.analisar_portas")
