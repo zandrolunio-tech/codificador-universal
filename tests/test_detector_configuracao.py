@@ -224,6 +224,49 @@ class TestDetectorConfiguracaoNegativos(unittest.TestCase):
 
         self.assertEqual(resultado, [])
 
+    def test_nao_detecta_propriedade_dentro_de_string(self):
+        casos = [
+            """const mensagem = "token: 'abc123'";""",
+            """const mensagem = "password: 'abc123'";""",
+            """const mensagem = "api_key: 'abc123'";""",
+        ]
+
+        for codigo in casos:
+            with self.subTest(codigo=codigo):
+                resultado = detectar_configuracoes(
+                    codigo,
+                    origem="teste",
+                    arquivo="teste.js",
+                    linguagem="javascript",
+                )
+
+                self.assertEqual(resultado, [])
+
+
+    def test_detecta_propriedade_real_mesmo_com_strings_no_codigo(self):
+        codigo = """
+const mensagem = "token: 'abc123'";
+
+const config = {
+    token: "valor-real"
+};
+"""
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="teste",
+            arquivo="teste.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "token")
+        self.assertEqual(
+            resultado[0]["localizacao"]["linha"],
+            5,
+        )
+
+
     def test_classificacao_token_em_configuracao(self):
         codigo = '''
         const config = {

@@ -580,7 +580,9 @@ def _criar_configuracao(
     tipo_deteccao: str,
 ) -> dict[str, Any]:
     nome_original = correspondencia.group("nome")
-    valor_bruto = correspondencia.group("valor")
+
+    inicio_valor, fim_valor = correspondencia.span("valor")
+    valor_bruto = codigo[inicio_valor:fim_valor]
 
     nome = _nome_normalizado(nome_original)
     valor = _desempacotar_valor(valor_bruto)
@@ -661,8 +663,10 @@ def detectar_configuracoes(
     - não tenta autenticação;
     - não usa valores encontrados.
 
-    Comentários são mascarados para a detecção, mas o conteúdo
-    original permanece intacto para preservar linha e coluna.
+    Comentários e conteúdos de strings são mascarados para a detecção,
+    preservando posições, delimitadores de string e quebras de linha.
+    O conteúdo original permanece intacto para recuperar os valores
+    observados através das posições dos grupos encontrados.
 
     São reconhecidas duas formas principais:
     - propriedades: token: "valor"
@@ -673,7 +677,7 @@ def detectar_configuracoes(
     if not isinstance(codigo, str) or not codigo:
         return []
 
-    codigo_analisavel = _mascarar_comentarios(
+    codigo_analisavel = _mascarar_comentarios_e_strings(
         codigo,
         linguagem=linguagem,
     )
@@ -692,13 +696,8 @@ def detectar_configuracoes(
             )
         )
 
-    codigo_atribuicoes = _mascarar_comentarios_e_strings(
-        codigo,
-        linguagem=linguagem,
-    )
-
     for correspondencia in _PADRAO_ATRIBUICAO.finditer(
-        codigo_atribuicoes
+        codigo_analisavel
     ):
         ocorrencias.append(
             (
