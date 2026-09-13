@@ -3,6 +3,7 @@ import unittest
 from online.modelos import (
     JavaScriptAnalise,
     JavaScriptExtraido,
+    OnlineResultado,
 )
 
 
@@ -405,6 +406,401 @@ class TestModelosJavaScript(unittest.TestCase):
             rota,
             {},
         )
+
+    def test_normaliza_configuracao_basica(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="api_base_url",
+            valor="https://api.exemplo.test",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="url",
+            sensivel=False,
+            confianca="alta",
+        )
+
+        self.assertEqual(
+            configuracao["nome"],
+            "api_base_url",
+        )
+        self.assertEqual(
+            configuracao["valor"],
+            "https://api.exemplo.test",
+        )
+        self.assertEqual(
+            configuracao["origem"],
+            "javascript",
+        )
+        self.assertEqual(
+            configuracao["fonte"],
+            "configuracao",
+        )
+        self.assertEqual(
+            configuracao["tipo"],
+            "url",
+        )
+        self.assertFalse(
+            configuracao["sensivel"],
+        )
+        self.assertEqual(
+            configuracao["confianca"],
+            "alta",
+        )
+
+    def test_normaliza_configuracao_sensivel_redige_valor(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="api_key",
+            valor="segredo-original",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="segredo",
+            sensivel=True,
+            confianca="alta",
+        )
+
+        self.assertEqual(
+            configuracao["valor"],
+            "[REDACTED]",
+        )
+        self.assertTrue(
+            configuracao["sensivel"],
+        )
+
+    def test_normaliza_configuracao_rejeita_nome_vazio(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="",
+            valor="algum-valor",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="texto",
+            sensivel=False,
+            confianca="alta",
+        )
+
+        self.assertEqual(
+            configuracao,
+            {},
+        )
+
+    def test_normaliza_configuracao_preserva_origem(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="ambiente",
+            valor="production",
+            origem="html",
+            fonte="atributo",
+            tipo="ambiente",
+            sensivel=False,
+            confianca="media",
+        )
+
+        self.assertEqual(
+            configuracao["origem"],
+            "html",
+        )
+        self.assertEqual(
+            configuracao["fonte"],
+            "atributo",
+        )
+
+    def test_normaliza_configuracao_preserva_tipo(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="habilitado",
+            valor="true",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="boolean",
+            sensivel=False,
+            confianca="media",
+        )
+
+        self.assertEqual(
+            configuracao["tipo"],
+            "boolean",
+        )
+
+    def test_normaliza_configuracao_normaliza_confianca(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="api_url",
+            valor="https://api.exemplo.test",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="url",
+            sensivel=False,
+            confianca=" ALTA ",
+        )
+
+        self.assertEqual(
+            configuracao["confianca"],
+            "alta",
+        )
+
+    def test_normaliza_configuracao_preserva_valor_nao_sensivel(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="ambiente",
+            valor="production",
+            origem="javascript",
+            fonte="configuracao",
+            tipo="ambiente",
+            sensivel=False,
+            confianca="alta",
+        )
+
+        self.assertEqual(
+            configuracao["valor"],
+            "production",
+        )
+
+    def test_normaliza_configuracao_com_proveniencia(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="token",
+            valor="valor-secreto",
+            origem="javascript",
+            fonte="app.js",
+            localizacao={
+                "linha": 184,
+                "coluna": 17,
+            },
+            caminho="config.authentication.token",
+            contexto="objeto de configuração",
+            tipo="segredo",
+            sensivel=True,
+            classificacao="provavel",
+            pontuacao=92,
+            confianca="alta",
+            evidencias=[
+                "nome compatível com credencial",
+                "encontrado em objeto de configuração",
+            ],
+        )
+
+        self.assertEqual(
+            configuracao["nome"],
+            "token",
+        )
+        self.assertEqual(
+            configuracao["origem"],
+            "javascript",
+        )
+        self.assertEqual(
+            configuracao["fonte"],
+            "app.js",
+        )
+        self.assertEqual(
+            configuracao["localizacao"]["linha"],
+            184,
+        )
+        self.assertEqual(
+            configuracao["localizacao"]["coluna"],
+            17,
+        )
+        self.assertEqual(
+            configuracao["caminho"],
+            "config.authentication.token",
+        )
+        self.assertEqual(
+            configuracao["contexto"],
+            "objeto de configuração",
+        )
+        self.assertEqual(
+            configuracao["tipo"],
+            "segredo",
+        )
+        self.assertTrue(
+            configuracao["sensivel"],
+        )
+        self.assertEqual(
+            configuracao["classificacao"],
+            "provavel",
+        )
+        self.assertEqual(
+            configuracao["pontuacao"],
+            92,
+        )
+        self.assertEqual(
+            configuracao["confianca"],
+            "alta",
+        )
+        self.assertEqual(
+            len(configuracao["evidencias"]),
+            2,
+        )
+        self.assertTrue(
+            configuracao["valor_protegido"],
+        )
+        self.assertEqual(
+            configuracao["valor"],
+            "[REDACTED]",
+        )
+
+    def test_normaliza_configuracao_gera_fingerprint(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="api_key",
+            valor="segredo-original",
+            origem="javascript",
+            fonte="app.js",
+            tipo="segredo",
+            sensivel=True,
+            classificacao="provavel",
+            pontuacao=90,
+            confianca="alta",
+            evidencias=[
+                "nome compatível com API key",
+            ],
+        )
+
+        self.assertIn(
+            "fingerprint",
+            configuracao,
+        )
+        self.assertEqual(
+            configuracao["fingerprint"]["algoritmo"],
+            "sha256",
+        )
+        self.assertTrue(
+            configuracao["fingerprint"]["valor"],
+        )
+        self.assertNotEqual(
+            configuracao["fingerprint"]["valor"],
+            "segredo-original",
+        )
+
+    def test_normaliza_configuracao_nao_expoe_segredo(self):
+        from online.configuracao import normalizar_configuracao
+
+        segredo = "MINHA-CREDENCIAL-SECRETA"
+
+        configuracao = normalizar_configuracao(
+            nome="private_key",
+            valor=segredo,
+            origem="javascript",
+            fonte="app.js",
+            tipo="segredo",
+            sensivel=True,
+            classificacao="provavel",
+            pontuacao=95,
+            confianca="alta",
+            evidencias=[
+                "nome compatível com chave privada",
+            ],
+        )
+
+        self.assertEqual(
+            configuracao["valor"],
+            "[REDACTED]",
+        )
+        self.assertNotIn(
+            segredo,
+            str(configuracao),
+        )
+
+    def test_normaliza_configuracao_sem_localizacao_preserva_proveniencia(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="authorization",
+            valor="Bearer exemplo",
+            origem="http",
+            fonte="header",
+            caminho="Authorization",
+            contexto="cabecalho HTTP",
+            tipo="credencial",
+            sensivel=True,
+            classificacao="possivel",
+            pontuacao=70,
+            confianca="media",
+            evidencias=[
+                "header HTTP observado",
+            ],
+        )
+
+        self.assertEqual(
+            configuracao["origem"],
+            "http",
+        )
+        self.assertEqual(
+            configuracao["fonte"],
+            "header",
+        )
+        self.assertEqual(
+            configuracao["caminho"],
+            "Authorization",
+        )
+        self.assertEqual(
+            configuracao["contexto"],
+            "cabecalho HTTP",
+        )
+        self.assertIsNone(
+            configuracao["localizacao"],
+        )
+
+    def test_normaliza_configuracao_rejeita_classificacao_invalida(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="token",
+            valor="abc",
+            origem="javascript",
+            fonte="app.js",
+            tipo="segredo",
+            sensivel=True,
+            classificacao="certeza-absoluta",
+            pontuacao=90,
+            confianca="alta",
+            evidencias=[
+                "nome compatível com token",
+            ],
+        )
+
+        self.assertEqual(
+            configuracao,
+            {},
+        )
+
+    def test_normaliza_configuracao_rejeita_pontuacao_invalida(self):
+        from online.configuracao import normalizar_configuracao
+
+        configuracao = normalizar_configuracao(
+            nome="token",
+            valor="abc",
+            origem="javascript",
+            fonte="app.js",
+            tipo="segredo",
+            sensivel=True,
+            classificacao="provavel",
+            pontuacao=150,
+            confianca="alta",
+            evidencias=[
+                "nome compatível com token",
+            ],
+        )
+
+        self.assertEqual(
+            configuracao,
+            {},
+        )
+
+    def test_online_resultado_possui_configuracoes(self):
+        resultado = OnlineResultado(alvo="https://exemplo.test")
+
+        self.assertEqual(resultado.configuracoes, [])
+        self.assertIsInstance(resultado.configuracoes, list)
 
     def test_online_resultado_possui_rotas(self):
         from online.modelos import OnlineResultado

@@ -210,3 +210,4 @@ class OnlineResultado:
     javascript_info: dict[str, Any] = field(default_factory=dict)
     urls: list[dict[str, Any]] = field(default_factory=list)
     rotas: list[dict[str, Any]] = field(default_factory=list)
+    configuracoes: list[dict[str, Any]] = field(default_factory=list)
