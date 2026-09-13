@@ -40,6 +40,11 @@ def _normalizar_localizacao(localizacao: Any) -> dict[str, Any] | None:
 
     resultado: dict[str, Any] = {}
 
+    if "arquivo" in localizacao:
+        arquivo = _normalizar_texto(localizacao["arquivo"])
+        if arquivo:
+            resultado["arquivo"] = arquivo
+
     if "linha" in localizacao:
         resultado["linha"] = localizacao["linha"]
 
