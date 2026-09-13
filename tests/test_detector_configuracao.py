@@ -176,6 +176,90 @@ class TestDetectorConfiguracao(unittest.TestCase):
         self.assertEqual(resultado[0]["nome"], "api_url")
 
 
+    def test_detecta_token_em_propriedade_indexada_com_aspas_simples(self):
+        codigo = "const config = {};\nconfig['token'] = 'abc123';\n"
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "token")
+
+    def test_valor_sensivel_em_propriedade_indexada_nao_e_exposto(self):
+        codigo = """const config = {};
+config["api_key"] = "super-segredo";
+"""
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "api_key")
+        self.assertNotEqual(resultado[0].get("valor"), "super-segredo")
+
+    def test_propriedade_indexada_dentro_de_string_nao_e_detectada(self):
+        codigo = 'const mensagem = \'config["token"] = "abc123"\';\n'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(resultado, [])
+
+    def test_propriedade_indexada_em_comentario_nao_e_detectada(self):
+        codigo = '// config["token"] = "abc123"\n'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(resultado, [])
+
+    def test_propriedade_indexada_preserva_localizacao(self):
+        codigo = 'const config = {};\nconfig["token"] = "abc123";\n'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["localizacao"]["linha"], 2)
+        self.assertGreater(resultado[0]["localizacao"]["coluna"], 0)
+
+    def test_detecta_token_em_propriedade_indexada(self):
+        codigo = """
+const config = {};
+config["token"] = "abc123";
+"""
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "token")
+
+
 if __name__ == "__main__":
     unittest.main()
 

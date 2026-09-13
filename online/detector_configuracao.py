@@ -109,6 +109,28 @@ _PADRAO_PROPRIEDADE = re.compile(
 )
 
 
+_PADRAO_PROPRIEDADE_INDEXADA = re.compile(
+    rf"""
+    \[
+    \s*
+    (?P<aspas>["'])
+    (?P<nome>
+        {_PADROES_NOME}
+    )
+    (?P=aspas)
+    \s*
+    \]
+    \s*
+    =
+    \s*
+    (?P<valor>
+        {_PADROES_VALOR}
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
 _PADRAO_ATRIBUICAO = re.compile(
     rf"""
     (?P<prefixo>\$)?
@@ -125,6 +147,76 @@ _PADRAO_ATRIBUICAO = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+
+
+def _mascarar_para_propriedade_indexada(
+    codigo: str,
+    linguagem: str | None = None,
+) -> str:
+    """
+    Mascara comentários e strings comuns, preservando o conteúdo textual
+    de strings que funcionam como chaves de propriedades indexadas.
+
+    Exemplo preservado:
+        config["token"] = "abc123"
+
+    Mas strings comuns continuam mascaradas:
+        const mensagem = "token = 'abc123'";
+    """
+    if not isinstance(codigo, str) or not codigo:
+        return codigo
+
+    base = _mascarar_comentarios_e_strings(
+        codigo,
+        linguagem=linguagem,
+    )
+
+    padrao = re.compile(
+        rf"""
+        (?P<prefixo>
+            (?:\b[A-Za-z_$][A-Za-z0-9_$]*\s*)?
+        )
+        \[
+        \s*
+        (?P<aspas>["'])
+        (?P<nome>
+            {_PADROES_NOME}
+        )
+        (?P=aspas)
+        \s*
+        \]
+        \s*
+        =
+        \s*
+        (?P<valor>
+            {_PADROES_VALOR}
+        )
+        """,
+        re.IGNORECASE | re.VERBOSE,
+    )
+
+    resultado = list(base)
+
+    for correspondencia in padrao.finditer(codigo):
+        inicio = correspondencia.start("nome")
+        fim = correspondencia.end("nome")
+
+        if inicio < 0 or fim < 0:
+            continue
+
+        trecho_base = base[inicio:fim]
+
+        if trecho_base.strip():
+            continue
+
+        original = codigo[inicio:fim]
+
+        if not original:
+            continue
+
+        resultado[inicio:fim] = original
+
+    return "".join(resultado)
 
 def _normalizar_linguagem(linguagem: str | None) -> str:
     if not isinstance(linguagem, str):
@@ -677,7 +769,7 @@ def detectar_configuracoes(
     if not isinstance(codigo, str) or not codigo:
         return []
 
-    codigo_analisavel = _mascarar_comentarios_e_strings(
+    codigo_analisavel = _mascarar_para_propriedade_indexada(
         codigo,
         linguagem=linguagem,
     )
@@ -692,6 +784,17 @@ def detectar_configuracoes(
             (
                 correspondencia.start(),
                 "propriedade",
+                correspondencia,
+            )
+        )
+
+    for correspondencia in _PADRAO_PROPRIEDADE_INDEXADA.finditer(
+        codigo_analisavel
+    ):
+        ocorrencias.append(
+            (
+                correspondencia.start(),
+                "propriedade_indexada",
                 correspondencia,
             )
         )
