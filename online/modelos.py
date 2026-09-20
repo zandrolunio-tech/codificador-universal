@@ -212,3 +212,4 @@ class OnlineResultado:
     rotas: list[dict[str, Any]] = field(default_factory=list)
     configuracoes: list[dict[str, Any]] = field(default_factory=list)
     ambientes: list[dict[str, Any]] = field(default_factory=list)
+    source_maps: list[dict[str, Any]] = field(default_factory=list)

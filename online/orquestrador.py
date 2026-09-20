@@ -16,6 +16,7 @@ from .analisador_portas import analisar_portas
 from .inventario_cookies import construir_inventario_cookies
 from .detector_configuracao import detectar_configuracoes
 from .detector_ambiente import detectar_ambientes
+from .detector_source_map import detectar_source_maps
 from .inventario_superficie import construir_inventario
 from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
@@ -106,6 +107,7 @@ def analisar_online(
     javascript_resultados = []
     configuracoes_observadas = []
     ambientes_observados = []
+    source_maps_observados = []
 
     for resposta in resultado.respostas:
         if not resposta.corpo:
@@ -149,6 +151,18 @@ def analisar_online(
 
             ambientes_observados.extend(
                 ambientes
+            )
+
+            source_maps = detectar_source_maps(
+                script.conteudo,
+                origem=script.origem,
+                arquivo=script.url or resposta.url,
+                script_url=script.url or resposta.url,
+                linguagem="javascript",
+            )
+
+            source_maps_observados.extend(
+                source_maps
             )
 
             strings = extrair_strings_javascript(
@@ -198,6 +212,9 @@ def analisar_online(
 
     resultado.ambientes = ambientes_observados
     resultado.metadados["ambientes"] = resultado.ambientes
+
+    resultado.source_maps = source_maps_observados
+    resultado.metadados["source_maps"] = resultado.source_maps
 
     # ---------------------------------------------------------
     # 2.5.1. INVENTARIO DE URLS OBSERVADAS

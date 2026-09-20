@@ -853,6 +853,95 @@ class TestOrquestrador(unittest.TestCase):
             resultado.ambientes,
         )
 
+    def test_source_maps_sao_integrados_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=120,
+            corpo="""
+            <html>
+              <script src="/static/app.js">
+              </script>
+              <script>
+                console.log("aplicacao");
+                //# sourceMappingURL=app.js.map
+              </script>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ), patch(
+            "online.orquestrador.analisar_tls",
+            return_value={},
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(
+            len(resultado.source_maps),
+            1,
+        )
+
+        source_map = resultado.source_maps[0]
+
+        self.assertEqual(
+            source_map["referencia"],
+            "app.js.map",
+        )
+
+        self.assertEqual(
+            source_map["url"],
+            "https://exemplo.test/app.js.map",
+        )
+
+        self.assertEqual(
+            source_map["origem"],
+            "script_inline",
+        )
+
+        self.assertEqual(
+            source_map["classificacao"],
+            "SOURCE_MAP_REFERENCIA",
+        )
+
+        self.assertEqual(
+            source_map["confianca"],
+            "ALTA",
+        )
+
+        self.assertEqual(
+            resultado.metadados["source_maps"],
+            resultado.source_maps,
+        )
+
+        self.assertIs(
+            resultado.metadados["source_maps"],
+            resultado.source_maps,
+        )
+
     @patch("online.orquestrador.construir_inventario")
     @patch("online.orquestrador.analisar_portas")
     @patch("online.orquestrador.analisar_tls")
