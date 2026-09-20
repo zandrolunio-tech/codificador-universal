@@ -260,6 +260,64 @@ config["token"] = "abc123";
         self.assertEqual(resultado[0]["nome"], "token")
 
 
+    def test_detecta_variavel_ambiente_process_env_indexado(self):
+        codigo = """
+        const apiUrl = process.env["API_URL"];
+        """
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+
+        item = resultado[0]
+
+        self.assertEqual(item["nome"], "API_URL")
+        self.assertEqual(item["tipo"], "variavel_ambiente")
+        self.assertFalse(item["sensivel"])
+        self.assertIsNone(item["valor"])
+
+    def test_detecta_variavel_ambiente_import_meta_env_indexado(self):
+        codigo = """
+        const token = import.meta.env["VITE_API_TOKEN"];
+        """
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(len(resultado), 1)
+
+        item = resultado[0]
+
+        self.assertEqual(item["nome"], "VITE_API_TOKEN")
+        self.assertEqual(item["tipo"], "variavel_ambiente")
+        self.assertFalse(item["sensivel"])
+        self.assertIsNone(item["valor"])
+
+    def test_nao_detecta_variavel_ambiente_indexada_em_string(self):
+        codigo = """
+        const mensagem = 'process.env["API_URL"]';
+        const outra = "import.meta.env['VITE_API_TOKEN']";
+        """
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+            linguagem="javascript",
+        )
+
+        self.assertEqual(resultado, [])
+
+
     def test_detecta_variavel_ambiente_process_env(self):
         codigo = """
         const apiUrl = process.env.API_URL;

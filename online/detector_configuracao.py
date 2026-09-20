@@ -131,7 +131,6 @@ _PADRAO_PROPRIEDADE_INDEXADA = re.compile(
 )
 
 
-
 _PADRAO_VARIAVEL_AMBIENTE = re.compile(
     r"""
     (?:
@@ -143,6 +142,28 @@ _PADRAO_VARIAVEL_AMBIENTE = re.compile(
     \.
     \s*
     (?P<nome>[A-Za-z_][A-Za-z0-9_]*)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+_PADRAO_VARIAVEL_AMBIENTE_INDEXADA = re.compile(
+    r"""
+    (?:
+        process\.env
+        |
+        import\.meta\.env
+    )
+    \s*
+    \[
+    \s*
+    (?:
+        "(?P<nome_duplo>[A-Za-z_][A-Za-z0-9_]*)"
+        |
+        '(?P<nome_simples>[A-Za-z_][A-Za-z0-9_]*)'
+    )
+    \s*
+    \]
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -163,7 +184,6 @@ _PADRAO_ATRIBUICAO = re.compile(
     """,
     re.IGNORECASE | re.VERBOSE,
 )
-
 
 
 def _mascarar_para_propriedade_indexada(
@@ -232,6 +252,32 @@ def _mascarar_para_propriedade_indexada(
             continue
 
         resultado[inicio:fim] = original
+
+    for correspondencia in _PADRAO_VARIAVEL_AMBIENTE_INDEXADA.finditer(
+        codigo
+    ):
+        grupo_nome = (
+            "nome_duplo"
+            if correspondencia.group("nome_duplo") is not None
+            else "nome_simples"
+        )
+
+        inicio = correspondencia.start(grupo_nome)
+        fim = correspondencia.end(grupo_nome)
+
+        if inicio < 0 or fim < 0:
+            continue
+
+        prefixo = codigo[correspondencia.start():inicio]
+
+        prefixo_analisavel = base[
+            correspondencia.start():inicio
+        ]
+
+        if prefixo_analisavel != prefixo:
+            continue
+
+        resultado[inicio:fim] = codigo[inicio:fim]
 
     return "".join(resultado)
 
@@ -394,7 +440,6 @@ def _mascarar_comentarios(
             continue
 
     return "".join(resultado)
-
 
 
 def _mascarar_comentarios_e_strings(
@@ -755,6 +800,15 @@ def _criar_configuracao(
     )
 
 
+def _nome_variavel_ambiente_indexada(
+    correspondencia: re.Match[str],
+) -> str:
+    return (
+        correspondencia.group("nome_duplo")
+        or correspondencia.group("nome_simples")
+        or ""
+    ).strip()
+
 
 def _criar_variavel_ambiente(
     *,
@@ -765,7 +819,18 @@ def _criar_variavel_ambiente(
     caminho: str | None,
     tipo_deteccao: str,
 ) -> dict[str, Any]:
-    nome = correspondencia.group("nome").strip()
+    if tipo_deteccao == "variavel_ambiente_indexada":
+        nome = _nome_variavel_ambiente_indexada(
+            correspondencia
+        )
+        posicao_nome = (
+            correspondencia.start("nome_duplo")
+            if correspondencia.group("nome_duplo") is not None
+            else correspondencia.start("nome_simples")
+        )
+    else:
+        nome = correspondencia.group("nome").strip()
+        posicao_nome = correspondencia.start("nome")
 
     evidencias = [
         f"variável de ambiente referenciada: {nome}",
@@ -780,7 +845,7 @@ def _criar_variavel_ambiente(
         fonte=arquivo or "",
         localizacao=_localizacao(
             codigo,
-            correspondencia.start("nome"),
+            posicao_nome,
             arquivo=arquivo,
         ),
         caminho=caminho or "",
@@ -792,7 +857,6 @@ def _criar_variavel_ambiente(
         confianca="media",
         evidencias=evidencias,
     )
-
 
 
 def detectar_configuracoes(
@@ -867,6 +931,22 @@ def detectar_configuracoes(
             )
         )
 
+    for correspondencia in _PADRAO_VARIAVEL_AMBIENTE_INDEXADA.finditer(
+        codigo_analisavel
+    ):
+        nome = _nome_variavel_ambiente_indexada(correspondencia)
+
+        if not nome:
+            continue
+
+        ocorrencias.append(
+            (
+                correspondencia.start(),
+                "variavel_ambiente_indexada",
+                correspondencia,
+            )
+        )
+
     for correspondencia in _PADRAO_VARIAVEL_AMBIENTE.finditer(
         codigo_analisavel
     ):
@@ -883,9 +963,14 @@ def detectar_configuracoes(
     resultado: list[dict[str, Any]] = []
 
     for _, tipo_deteccao, correspondencia in ocorrencias:
-        nome = _nome_normalizado(
-            correspondencia.group("nome")
-        )
+        if tipo_deteccao == "variavel_ambiente_indexada":
+            nome = _nome_variavel_ambiente_indexada(
+                correspondencia
+            )
+        else:
+            nome = _nome_normalizado(
+                correspondencia.group("nome")
+            )
 
         chave = (
             nome,
@@ -897,7 +982,10 @@ def detectar_configuracoes(
 
         encontrados.add(chave)
 
-        if tipo_deteccao == "variavel_ambiente":
+        if tipo_deteccao in {
+            "variavel_ambiente",
+            "variavel_ambiente_indexada",
+        }:
             resultado.append(
                 _criar_variavel_ambiente(
                     codigo=codigo,
