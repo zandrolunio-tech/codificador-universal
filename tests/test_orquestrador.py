@@ -775,6 +775,84 @@ class TestOrquestrador(unittest.TestCase):
             str(resultado.configuracoes),
         )
 
+    def test_ambientes_sao_integrados_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=100,
+            corpo="""
+            <html>
+              <script>
+                if (process.env.NODE_ENV === "production") {
+                    console.log("producao");
+                }
+              </script>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ), patch(
+            "online.orquestrador.analisar_tls",
+            return_value={},
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(
+            len(resultado.ambientes),
+            1,
+        )
+
+        ambiente = resultado.ambientes[0]
+
+        self.assertEqual(
+            ambiente["ambiente"],
+            "production",
+        )
+
+        self.assertEqual(
+            ambiente["tipo"],
+            "comparacao",
+        )
+
+        self.assertEqual(
+            ambiente["evidencias"],
+            ["process.env.NODE_ENV"],
+        )
+
+        self.assertEqual(
+            resultado.metadados["ambientes"],
+            resultado.ambientes,
+        )
+
+        self.assertIs(
+            resultado.metadados["ambientes"],
+            resultado.ambientes,
+        )
+
     @patch("online.orquestrador.construir_inventario")
     @patch("online.orquestrador.analisar_portas")
     @patch("online.orquestrador.analisar_tls")

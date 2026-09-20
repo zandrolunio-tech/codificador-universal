@@ -15,6 +15,7 @@ from .normalizador_javascript import normalizar_string_javascript
 from .analisador_portas import analisar_portas
 from .inventario_cookies import construir_inventario_cookies
 from .detector_configuracao import detectar_configuracoes
+from .detector_ambiente import detectar_ambientes
 from .inventario_superficie import construir_inventario
 from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
@@ -104,6 +105,7 @@ def analisar_online(
     # 2.5. ANÁLISE ESTÁTICA DE JAVASCRIPT
     javascript_resultados = []
     configuracoes_observadas = []
+    ambientes_observados = []
 
     for resposta in resultado.respostas:
         if not resposta.corpo:
@@ -136,6 +138,17 @@ def analisar_online(
 
             configuracoes_observadas.extend(
                 configuracoes
+            )
+
+            ambientes = detectar_ambientes(
+                script.conteudo,
+                origem=script.origem,
+                arquivo=script.url or resposta.url,
+                linguagem="javascript",
+            )
+
+            ambientes_observados.extend(
+                ambientes
             )
 
             strings = extrair_strings_javascript(
@@ -182,6 +195,9 @@ def analisar_online(
 
     resultado.configuracoes = configuracoes_observadas
     resultado.metadados["configuracoes"] = resultado.configuracoes
+
+    resultado.ambientes = ambientes_observados
+    resultado.metadados["ambientes"] = resultado.ambientes
 
     # ---------------------------------------------------------
     # 2.5.1. INVENTARIO DE URLS OBSERVADAS
