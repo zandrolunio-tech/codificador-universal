@@ -176,6 +176,85 @@ class TestDetectorConfiguracao(unittest.TestCase):
         self.assertEqual(resultado[0]["nome"], "api_url")
 
 
+    def test_normaliza_access_token_em_camel_case(self):
+        codigo = 'const accessToken = "SEGREDO";'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "access_token")
+        self.assertTrue(resultado[0]["sensivel"])
+        self.assertEqual(resultado[0]["valor"], "[REDACTED]")
+
+
+    def test_normaliza_refresh_token_em_camel_case(self):
+        codigo = 'const refreshToken = "SEGREDO";'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "refresh_token")
+        self.assertTrue(resultado[0]["sensivel"])
+        self.assertEqual(resultado[0]["valor"], "[REDACTED]")
+
+
+    def test_normaliza_private_key_em_camel_case(self):
+        codigo = 'const privateKey = "SEGREDO";'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "private_key")
+        self.assertTrue(resultado[0]["sensivel"])
+        self.assertEqual(resultado[0]["valor"], "[REDACTED]")
+
+
+    def test_normaliza_api_url_em_camel_case(self):
+        codigo = 'const apiUrl = "https://api.exemplo.test";'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "api_url")
+        self.assertEqual(
+            resultado[0]["valor"],
+            "https://api.exemplo.test",
+        )
+
+
+    def test_normaliza_base_url_em_camel_case(self):
+        codigo = 'const baseUrl = "https://api.exemplo.test";'
+
+        resultado = detectar_configuracoes(
+            codigo,
+            origem="javascript",
+            arquivo="app.js",
+        )
+
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["nome"], "base_url")
+        self.assertEqual(
+            resultado[0]["valor"],
+            "https://api.exemplo.test",
+        )
+
+
     def test_detecta_token_em_propriedade_indexada_com_aspas_simples(self):
         codigo = "const config = {};\nconfig['token'] = 'abc123';\n"
 

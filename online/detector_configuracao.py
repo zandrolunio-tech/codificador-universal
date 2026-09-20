@@ -635,10 +635,15 @@ def _nome_normalizado(nome: str) -> str:
         "api-key": "api_key",
         "apikey": "api_key",
         "access-token": "access_token",
+        "accesstoken": "access_token",
         "refresh-token": "refresh_token",
+        "refreshtoken": "refresh_token",
         "private-key": "private_key",
+        "privatekey": "private_key",
         "api-url": "api_url",
+        "apiurl": "api_url",
         "base-url": "base_url",
+        "baseurl": "base_url",
     }
 
     return aliases.get(nome, nome)
