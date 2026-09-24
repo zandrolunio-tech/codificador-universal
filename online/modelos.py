@@ -214,3 +214,4 @@ class OnlineResultado:
     ambientes: list[dict[str, Any]] = field(default_factory=list)
     source_maps: list[dict[str, Any]] = field(default_factory=list)
     frameworks: list[dict[str, Any]] = field(default_factory=list)
+    bibliotecas: list[dict[str, Any]] = field(default_factory=list)

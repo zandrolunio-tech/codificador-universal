@@ -853,6 +853,87 @@ class TestOrquestrador(unittest.TestCase):
             resultado.ambientes,
         )
 
+    def test_bibliotecas_sao_integradas_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=180,
+            corpo="""
+            <html>
+              <script>
+                import axios from "axios";
+                axios.get("/api/clientes");
+              </script>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=5,
+                analisar_certificado=False,
+            )
+
+        self.assertEqual(
+            len(resultado.bibliotecas),
+            1,
+        )
+
+        biblioteca = resultado.bibliotecas[0]
+
+        self.assertEqual(
+            biblioteca["biblioteca"],
+            "axios",
+        )
+
+        self.assertEqual(
+            biblioteca["linguagem"],
+            "javascript",
+        )
+
+        self.assertEqual(
+            biblioteca["confianca"],
+            "ALTA",
+        )
+
+        self.assertEqual(
+            resultado.metadados["bibliotecas"],
+            resultado.bibliotecas,
+        )
+
+        self.assertIs(
+            resultado.metadados["bibliotecas"],
+            resultado.bibliotecas,
+        )
+
+        self.assertIn(
+            "axios",
+            resultado.javascript_info["imports"],
+        )
+
+
     def test_frameworks_sao_integrados_ao_resultado_online(self):
         resposta = HTTPResposta(
             url="https://exemplo.test/",

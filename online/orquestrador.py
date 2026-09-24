@@ -21,6 +21,7 @@ from .detector_framework import (
     detectar_frameworks,
     detectar_frameworks_html,
 )
+from .detector_biblioteca import detectar_bibliotecas
 from .inventario_superficie import construir_inventario
 from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
@@ -131,6 +132,7 @@ def analisar_online(
     configuracoes_observadas = []
     ambientes_observados = []
     source_maps_observados = []
+    bibliotecas_observadas = []
 
     for resposta in resultado.respostas:
         if not resposta.corpo:
@@ -199,6 +201,17 @@ def analisar_online(
                 frameworks
             )
 
+            bibliotecas = detectar_bibliotecas(
+                script.conteudo,
+                origem=script.origem,
+                arquivo=script.url or resposta.url,
+                linguagem="javascript",
+            )
+
+            bibliotecas_observadas.extend(
+                bibliotecas
+            )
+
             strings = extrair_strings_javascript(
                 script.conteudo
             )
@@ -252,6 +265,9 @@ def analisar_online(
 
     resultado.frameworks = frameworks_observados
     resultado.metadados["frameworks"] = resultado.frameworks
+
+    resultado.bibliotecas = bibliotecas_observadas
+    resultado.metadados["bibliotecas"] = resultado.bibliotecas
 
     # ---------------------------------------------------------
     # 2.5.1. INVENTARIO DE URLS OBSERVADAS
