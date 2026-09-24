@@ -17,7 +17,10 @@ from .inventario_cookies import construir_inventario_cookies
 from .detector_configuracao import detectar_configuracoes
 from .detector_ambiente import detectar_ambientes
 from .detector_source_map import detectar_source_maps
-from .detector_framework import detectar_frameworks
+from .detector_framework import (
+    detectar_frameworks,
+    detectar_frameworks_html,
+)
 from .inventario_superficie import construir_inventario
 from .modelos import OnlineResultado, TLSResultado
 from .evidencias import (
@@ -63,10 +66,29 @@ def analisar_online(
     # 2. ANÁLISE DAS RESPOSTAS HTTP
     # ---------------------------------------------------------
     analises_respostas = []
+    frameworks_observados = []
 
     for resposta in resultado.respostas:
         analise = analisar_resposta(resposta)
         analises_respostas.append(analise)
+
+        html = analise.get("html", {})
+
+        if isinstance(html, dict):
+            tecnologias_html = html.get(
+                "tecnologias",
+                [],
+            )
+
+            frameworks_html = detectar_frameworks_html(
+                tecnologias_html,
+                origem="html",
+                arquivo=resposta.url,
+            )
+
+            frameworks_observados.extend(
+                frameworks_html
+            )
 
         http_bruto = analise.get("http", {})
 
@@ -109,7 +131,6 @@ def analisar_online(
     configuracoes_observadas = []
     ambientes_observados = []
     source_maps_observados = []
-    frameworks_observados = []
 
     for resposta in resultado.respostas:
         if not resposta.corpo:

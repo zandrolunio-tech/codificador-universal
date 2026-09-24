@@ -328,5 +328,119 @@ const app = React.createElement("div");
         )
 
 
+    def test_detecta_framework_por_tecnologia_html(self):
+        from online.detector_framework import (
+            detectar_frameworks_html,
+        )
+
+        tecnologias = [
+            {
+                "nome": "react",
+                "categoria": "frontend_framework",
+                "evidencia": "texto_html",
+                "confianca": "BAIXA",
+            }
+        ]
+
+        resultado = detectar_frameworks_html(
+            tecnologias,
+            origem="html",
+            arquivo="https://exemplo.test/",
+        )
+
+        self.assertEqual(
+            len(resultado),
+            1,
+        )
+
+        observacao = resultado[0]
+
+        self.assertEqual(
+            observacao["framework"],
+            "react",
+        )
+
+        self.assertEqual(
+            observacao["origem"],
+            "html",
+        )
+
+        self.assertEqual(
+            observacao["arquivo"],
+            "https://exemplo.test/",
+        )
+
+        self.assertEqual(
+            observacao["tipo"],
+            "html",
+        )
+
+        self.assertEqual(
+            observacao["evidencias"],
+            ["texto_html"],
+        )
+
+        self.assertEqual(
+            observacao["pontuacao"],
+            60,
+        )
+
+        self.assertEqual(
+            observacao["confianca"],
+            "BAIXA",
+        )
+
+        self.assertEqual(
+            observacao["linguagem"],
+            "html",
+        )
+
+    def test_ignora_tecnologia_html_que_nao_e_frontend_framework(self):
+        from online.detector_framework import (
+            detectar_frameworks_html,
+        )
+
+        tecnologias = [
+            {
+                "nome": "wordpress",
+                "categoria": "cms",
+                "evidencia": "texto_html",
+                "confianca": "BAIXA",
+            }
+        ]
+
+        resultado = detectar_frameworks_html(
+            tecnologias
+        )
+
+        self.assertEqual(
+            resultado,
+            [],
+        )
+
+    def test_ignora_framework_html_nao_suportado(self):
+        from online.detector_framework import (
+            detectar_frameworks_html,
+        )
+
+        tecnologias = [
+            {
+                "nome": "bootstrap",
+                "categoria": "frontend_framework",
+                "evidencia": "texto_html",
+                "confianca": "BAIXA",
+            }
+        ]
+
+        resultado = detectar_frameworks_html(
+            tecnologias
+        )
+
+        self.assertEqual(
+            resultado,
+            [],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

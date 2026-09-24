@@ -411,6 +411,85 @@ def _criar_observacao(
     }
 
 
+def detectar_frameworks_html(
+    tecnologias,
+    origem: str = "html",
+    arquivo: str = "",
+):
+    """
+    Converte tecnologias frontend já detectadas pelo analisador HTML
+    em observações estruturadas de framework.
+
+    Não executa novas detecções nem duplica as regras do analisador HTML.
+    Apenas reaproveita as evidências existentes em HTMLAnalise.tecnologias.
+    """
+    resultado = []
+
+    if not isinstance(tecnologias, list):
+        return resultado
+
+    frameworks_suportados = {
+        "react",
+        "vue",
+        "angular",
+        "next.js",
+        "nuxt",
+    }
+
+    for tecnologia in tecnologias:
+        if not isinstance(tecnologia, dict):
+            continue
+
+        if tecnologia.get("categoria") != "frontend_framework":
+            continue
+
+        framework = str(
+            tecnologia.get("nome", "")
+        ).strip().lower()
+
+        if framework not in frameworks_suportados:
+            continue
+
+        confianca = str(
+            tecnologia.get(
+                "confianca",
+                "BAIXA",
+            )
+        ).strip().upper()
+
+        pontuacao = {
+            "ALTA": 95,
+            "MEDIA": 75,
+            "BAIXA": 60,
+        }.get(
+            confianca,
+            60,
+        )
+
+        resultado.append(
+            {
+                "framework": framework,
+                "origem": origem,
+                "arquivo": arquivo,
+                "tipo": "html",
+                "localizacao": {
+                    "linha": 0,
+                    "coluna": 0,
+                },
+                "evidencias": [
+                    tecnologia.get(
+                        "evidencia",
+                        "texto_html",
+                    )
+                ],
+                "pontuacao": pontuacao,
+                "confianca": confianca,
+                "linguagem": "html",
+            }
+        )
+
+    return resultado
+
 def detectar_frameworks(
     codigo: str,
     origem: str = "",

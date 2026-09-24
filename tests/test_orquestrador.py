@@ -935,6 +935,104 @@ class TestOrquestrador(unittest.TestCase):
             resultado.frameworks,
         )
 
+    def test_framework_html_e_integrado_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=180,
+            corpo="""
+            <!doctype html>
+            <html>
+              <head>
+                <title>React application</title>
+              </head>
+              <body></body>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ), patch(
+            "online.orquestrador.analisar_tls",
+            return_value={},
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(
+            len(resultado.frameworks),
+            1,
+        )
+
+        framework = resultado.frameworks[0]
+
+        self.assertEqual(
+            framework["framework"],
+            "react",
+        )
+
+        self.assertEqual(
+            framework["tipo"],
+            "html",
+        )
+
+        self.assertEqual(
+            framework["origem"],
+            "html",
+        )
+
+        self.assertEqual(
+            framework["arquivo"],
+            "https://exemplo.test/",
+        )
+
+        self.assertEqual(
+            framework["pontuacao"],
+            60,
+        )
+
+        self.assertEqual(
+            framework["confianca"],
+            "BAIXA",
+        )
+
+        self.assertEqual(
+            framework["linguagem"],
+            "html",
+        )
+
+        self.assertEqual(
+            resultado.metadados["frameworks"],
+            resultado.frameworks,
+        )
+
+        self.assertIs(
+            resultado.metadados["frameworks"],
+            resultado.frameworks,
+        )
+
     def test_source_maps_sao_integrados_ao_resultado_online(self):
         resposta = HTTPResposta(
             url="https://exemplo.test/",
