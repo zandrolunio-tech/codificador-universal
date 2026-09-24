@@ -802,6 +802,22 @@ class TestModelosJavaScript(unittest.TestCase):
         self.assertEqual(resultado.configuracoes, [])
         self.assertIsInstance(resultado.configuracoes, list)
 
+    def test_online_resultado_possui_frameworks(self):
+        resultado = OnlineResultado(
+            alvo="https://exemplo.test"
+        )
+
+        self.assertEqual(
+            resultado.frameworks,
+            [],
+        )
+
+        self.assertIsInstance(
+            resultado.frameworks,
+            list,
+        )
+
+
     def test_online_resultado_possui_ambientes(self):
         resultado = OnlineResultado(
             alvo="https://exemplo.test"

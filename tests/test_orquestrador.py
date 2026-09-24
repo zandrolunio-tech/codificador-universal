@@ -853,6 +853,88 @@ class TestOrquestrador(unittest.TestCase):
             resultado.ambientes,
         )
 
+    def test_frameworks_sao_integrados_ao_resultado_online(self):
+        resposta = HTTPResposta(
+            url="https://exemplo.test/",
+            status_code=200,
+            reason="OK",
+            http_version="HTTP/1.1",
+            headers=[
+                HTTPHeader(
+                    nome="Content-Type",
+                    valor="text/html",
+                )
+            ],
+            content_type="text/html",
+            tamanho=180,
+            corpo="""
+            <html>
+              <script>
+                import React from "react";
+                const app = React.createElement("div");
+              </script>
+            </html>
+            """,
+            tempo_resposta_ms=10,
+            redirecionamentos=[],
+        )
+
+        coleta = SimpleNamespace(
+            sucesso=True,
+            respostas=[resposta],
+            cookies=[],
+            erros=[],
+        )
+
+        with patch(
+            "online.orquestrador.coletar",
+            return_value=coleta,
+        ), patch(
+            "online.orquestrador.analisar_tls",
+            return_value={},
+        ):
+            resultado = analisar_online(
+                "https://exemplo.test/",
+                timeout=10,
+            )
+
+        self.assertEqual(
+            len(resultado.frameworks),
+            1,
+        )
+
+        framework = resultado.frameworks[0]
+
+        self.assertEqual(
+            framework["framework"],
+            "react",
+        )
+
+        self.assertEqual(
+            framework["tipo"],
+            "import",
+        )
+
+        self.assertEqual(
+            framework["pontuacao"],
+            95,
+        )
+
+        self.assertEqual(
+            framework["confianca"],
+            "ALTA",
+        )
+
+        self.assertEqual(
+            resultado.metadados["frameworks"],
+            resultado.frameworks,
+        )
+
+        self.assertIs(
+            resultado.metadados["frameworks"],
+            resultado.frameworks,
+        )
+
     def test_source_maps_sao_integrados_ao_resultado_online(self):
         resposta = HTTPResposta(
             url="https://exemplo.test/",
